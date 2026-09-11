@@ -9,7 +9,7 @@
 #define INC_SHELL_H_
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.0.0"
+#define SHELL_VER "0.0.1"
 
 // Xmacro for commands. Members: command, function, helptext
 #define COMMANDS \

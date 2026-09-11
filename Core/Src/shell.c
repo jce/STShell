@@ -78,6 +78,29 @@ void move_line_left()	// For deleting characters at cbpos, and moving the remain
 	}
 }
 
+void reinstate_line()	// Doskey functionality for one line only.
+{
+	int buf_len = strlen(commandbuf);
+	if (cbpos == 0 && buf_len > 0)
+	{
+		for (int i = 0; i < buf_len; i++)
+			shell_tx(commandbuf[i]);
+		cbpos = buf_len;
+	}
+}
+
+void clear_line()	// Inverse of the doskey, clear the line.
+{
+	for (int i = 0; i < cbpos; i++)
+	{
+		shell_tx_str("\x1B[D");
+		shell_tx(' ');
+		shell_tx_str("\x1B[D");
+	}
+	//memset(commandbuf, 0, sizeof(commandbuf));
+	cbpos = 0;
+}
+
 typedef enum { RX_NORMAL, RX_ESC, RX_ESC_BRACKET } rx_state_t;
 static rx_state_t rx_state = RX_NORMAL;
 void shell_rx(uint8_t c)
@@ -95,8 +118,8 @@ void shell_rx(uint8_t c)
 	{
 		if ('D' == c)		{ /* left arrow */ if (cbpos > 0) 					{ cbpos--; shell_tx_str("\x1B[D");} }
 		else if ('C' == c)	{ /* right arrow */if (cbpos < strlen(commandbuf)) 	{ cbpos++; shell_tx_str("\x1B[C");} }
-		//else if ('A' == c)	{ /* up arrow */ 									{  		   shell_tx_str("\x1B[A");} }
-		//else if ('B' == c)	{ /* down arrow */ 									{ 		   shell_tx_str("\x1B[B");} }
+		else if ('A' == c)	{ /* up arrow */ 	reinstate_line(); 	}
+		else if ('B' == c)	{ /* down arrow */ 	clear_line();		}
 		rx_state = RX_NORMAL;
 		return;
 	}
@@ -121,14 +144,15 @@ void shell_rx(uint8_t c)
 	{
 		shell_tx('\r');
 		shell_tx('\n');
-		shell_process_cbuf();
-		memset(commandbuf, 0, sizeof(commandbuf));
+		if (cbpos != 0)
+			shell_process_cbuf();
 		cbpos = 0;
-		shell_tx('\r');
-		shell_tx('\n');
+		shell_tx_str("\r\n" SHELL_PROMPT);
 		return;
 	}
 
 	// In case a non return is typed
+	if (cbpos == 0)
+		memset(commandbuf, 0, sizeof(commandbuf));
 	move_line_right(c);
 }
