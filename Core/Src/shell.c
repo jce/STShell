@@ -1,6 +1,25 @@
 #include "stm32f3xx_hal.h"	// Fixes uint8_t being unknown.
 #include "shell.h"
-#include <string.h>
+#include <string.h>	// strlen, strcmp
+#include <stdio.h>	// sprintf
+
+/*
+ * Doskey (command recall) — single-buffer implementation
+ *
+ * No separate history buffer is used. After Enter, commandbuf retains
+ * the last command and cbpos is reset to 0. The command is NOT cleared
+ * from commandbuf until the user types a new character (see shell_rx).
+ *
+ * Up arrow:   reprints commandbuf and sets cbpos to its length.
+ * Down arrow: erases the displayed line, sets cbpos to 0.
+ *             commandbuf is left intact, so Up works again.
+ *
+ * Limitation: Up only recalls when cbpos == 0. Editing a recalled
+ * command then pressing Up again will not re-recall the original.
+ */
+
+//======================================================================
+// Line editor logic
 
 void (*shell_tx)(uint8_t); // Transmit function for one character
 void shell_register_tx(void (*_shell_tx)(uint8_t))
@@ -8,7 +27,6 @@ void shell_register_tx(void (*_shell_tx)(uint8_t))
 	shell_tx = _shell_tx;
 }
 
-#define CBLEN 16				// Command Buffer Length
 char commandbuf[CBLEN+1] = {0};	// Command buffer
 int cbpos = 0;					// Pointer position in command buffer.
 
@@ -22,15 +40,7 @@ void shell_tx_str(const char *p)
 	}
 }
 
-void shell_process_cbuf()
-{
-	char *cbufp = commandbuf;
-	while (*cbufp)
-	{
-		shell_tx(*cbufp);
-		cbufp++;
-	}
-}
+void dispatch();
 
 void move_line_right(char c)	// For inserting characters at cbpos and moving the remainder of the line right.
 {
@@ -91,13 +101,15 @@ void reinstate_line()	// Doskey functionality for one line only.
 
 void clear_line()	// Inverse of the doskey, clear the line.
 {
-	for (int i = 0; i < cbpos; i++)
-	{
+	int buf_len = strlen(commandbuf);
+	for (int i = 0; i < buf_len-cbpos; i++)	// There can be characters right of cursor position
+		shell_tx_str("\x1B[C");				// Move to the end.
+	for (int i = 0; i < buf_len; i++)		// Then clear character by
+	{										// character to the left.
 		shell_tx_str("\x1B[D");
 		shell_tx(' ');
 		shell_tx_str("\x1B[D");
 	}
-	//memset(commandbuf, 0, sizeof(commandbuf));
 	cbpos = 0;
 }
 
@@ -145,9 +157,9 @@ void shell_rx(uint8_t c)
 		shell_tx('\r');
 		shell_tx('\n');
 		if (cbpos != 0)
-			shell_process_cbuf();
+			dispatch();
 		cbpos = 0;
-		shell_tx_str("\r\n" SHELL_PROMPT);
+		shell_tx_str(SHELL_PROMPT);
 		return;
 	}
 
@@ -156,3 +168,197 @@ void shell_rx(uint8_t c)
 		memset(commandbuf, 0, sizeof(commandbuf));
 	move_line_right(c);
 }
+
+//====================================================================
+// Dispatcher logic
+
+// Xmacro for commands. Members: command, function, helptext
+#define COMMANDS \
+CMD(help, 		s_help, 	"Shows help") \
+CMD(version,	s_version, 	"Shows versions") \
+CMD(test,		s_test, 	"Test arguments")
+
+// Types
+typedef void (*cmd_func_t)(int argc, char **argv);
+typedef struct
+{
+	const char *cmd;
+	cmd_func_t fnc;
+} cmd_t;
+
+// Function prototypes
+#define CMD(NAME, FNC, HELP) void FNC (int, char **);
+COMMANDS
+#undef CMD
+
+// Function table
+static const cmd_t commands[] =
+{
+	#define CMD(NAME, FNC, HELP) {#NAME, FNC},
+	COMMANDS
+	#undef CMD
+	{NULL, NULL}
+};
+
+// Dispatcher. Reads from global state commandbuf, cbpos.
+void dispatch(void)
+{
+	int cblen = strlen(commandbuf);
+	char *argv[AVLEN];
+	int argc = 0;
+
+	char *p = commandbuf;
+	while (*p && argc < AVLEN)
+	{
+		while (*p == ' ')
+			p++;
+		if (!*p)
+			break;
+		argv[argc] = p;
+		argc++;
+		while (*p && *p != ' ')
+			p++;
+		if (*p)
+		{
+			*p = 0;
+			p++;
+		}
+	}
+
+	if (argc == 0)
+		return;
+
+	for (int i = 0; commands[i].cmd; i++)
+		if (strcmp(argv[0], commands[i].cmd) == 0)
+		{
+			commands[i].fnc(argc, argv);
+			p = commandbuf;
+			for (int j = cblen; j; j--)
+			{
+				if (*p == 0)
+					*p = ' ';
+				p++;
+			}
+			return;
+		}
+
+	shell_tx_str("Unknown command\r\n");
+}
+
+
+
+//===========================================================================
+// Commands
+
+void s_help(int argc, char **argv)
+{
+	shell_tx_str("STShell " SHELL_VER "\r\n");
+#define CMD(NAME, FNC, HELP) shell_tx_str(#NAME " - " HELP "\r\n");
+	COMMANDS
+#undef CMD
+}
+
+void s_version(int argc, char ** argv)
+{
+	char buf[80];
+	shell_tx_str("STShell " SHELL_VER "\r\n");
+
+	// Mistral helped me out with this.
+
+	#define FLASH_SIZE_REG    (*(uint16_t *)0x1FFFF7CC) // Flash size in KB
+	#define UID_REG           ((uint32_t *)0x1FFFF7AC)	// Unique device ID (96 bits = 3 words)
+	#define DBGMCU_IDCODE     (*(uint32_t *)0xE0042000) // Device ID (tells you which chip in the family)
+	// Bits [15:0] = device ID, bits [31:16] = revision
+    uint32_t idcode = DBGMCU_IDCODE;
+    sprintf(buf, "Device ID: 0x%03X\r\n", (unsigned int) (idcode & 0xFFF));
+    shell_tx_str(buf);
+    sprintf(buf, "Revision: 0x%04X\r\n", (unsigned int) ((idcode >> 16) & 0xFFFF));
+    shell_tx_str(buf);
+    sprintf(buf, "Flash: %u KB\r\n", FLASH_SIZE_REG);
+    shell_tx_str(buf);
+    sprintf(buf, "UID: %08lX%08lX%08lX\r\n", UID_REG[0], UID_REG[1], UID_REG[2]);
+    shell_tx_str(buf);
+    // Bits [31:24] = Implementer (0x41 = ARM)
+    // Bits [23:20] = Variant (major revision)
+    // Bits [19:16] = Architecture (0xF = Cortex-M4)
+    // Bits [15:4]  = Part number (0xC24 = Cortex-M4)
+    // Bits [3:0]   = Revision (minor revision rXpY)
+    sprintf(buf, "Core: ARM r%lup%lu\r\n",
+        (SCB->CPUID >> 20) & 0xF,   // Variant (major)
+        SCB->CPUID & 0xF);           // Revision (minor)
+    shell_tx_str(buf);
+
+    shell_tx_str("Build: " __DATE__ " " __TIME__ "\r\n");
+    shell_tx_str("Compiler version: " __VERSION__ "\r\n");
+#ifdef __GNUC__
+    sprintf(buf, "Compiler: GCC %d.%d.%d\r\n", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+#elif defined(__ICCARM__)
+    sprintf(buf, "Compiler: IAR\r\n");
+#elif defined(__CC_ARM)
+    sprintf(buf, "Compiler: ARMCC\r\n");
+#endif
+    shell_tx_str(buf);
+
+    uint32_t v = HAL_GetHalVersion();
+    sprintf(buf, "HAL: %lu.%lu.%lu\r\n",
+        (v >> 24) & 0xFF,
+        (v >> 16) & 0xFF,
+        (v >> 8)  & 0xFF);
+    shell_tx_str(buf);
+
+    sprintf(buf, "CMSIS: %u.%u\r\n",
+    		__CM_CMSIS_VERSION_MAIN,
+			__CM_CMSIS_VERSION_SUB);
+    shell_tx_str(buf);
+    sprintf(buf, "CMSIS Device: %u.%u.%u\r\n",
+    		__STM32F3_CMSIS_VERSION_MAIN,  // MAIN
+			__STM32F3_CMSIS_VERSION_SUB1,  // SUB1
+			__STM32F3_CMSIS_VERSION_SUB2); // SUB2
+    shell_tx_str(buf);
+}
+
+void s_test(int argc, char **argv)
+{
+	for (; argc; argc--)
+	{
+		shell_tx_str(*argv);
+		shell_tx_str("\r\n");
+		argv++;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

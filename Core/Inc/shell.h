@@ -9,15 +9,14 @@
 #define INC_SHELL_H_
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.0.1"
+#define SHELL_VER "0.0.2"
 
-// Xmacro for commands. Members: command, function, helptext
-#define COMMANDS \
-CMD(help, s_help, "Shows help list") \
-CMD(ver, s_version, "Shows versions")
 
 void shell_rx(uint8_t);	// Receive a character. Whole processing hangs on this one function
 
 void shell_register_tx(void (*)(uint8_t)); // Way to supply the shell with the tx function
+
+#define CBLEN 64				// Command Buffer Length
+#define AVLEN 8			// The argument vector maximum length
 
 #endif /* INC_SHELL_H_ */
