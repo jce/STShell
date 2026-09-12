@@ -2,22 +2,7 @@
 #include "shell.h"
 #include <string.h>	// strlen, strcmp
 #include <stdio.h>	// sprintf
-
-/*
- * Doskey (command recall) — single-buffer implementation
- *
- * No separate history buffer is used. After Enter, commandbuf retains
- * the last command and cbpos is reset to 0. The command is NOT cleared
- * from commandbuf until the user types a new character (see shell_rx).
- *
- * Up arrow:   reprints commandbuf and sets cbpos to its length.
- * Down arrow: erases the displayed line, sets cbpos to 0.
- *             commandbuf is left intact, so Up works again.
- *
- * Limitation: Up only recalls when cbpos == 0. Editing a recalled
- * command then pressing Up again will not re-recall the original.
- */
-
+#include "stdbool.h"
 //======================================================================
 // Line editor logic
 
@@ -29,6 +14,7 @@ void shell_register_tx(void (*_shell_tx)(uint8_t))
 
 char commandbuf[CBLEN+1] = {0};	// Command buffer
 int cbpos = 0;					// Pointer position in command buffer.
+bool new_command = true;		// True if the command to be typed is new.
 
 // Send a complete string via shell_tx
 void shell_tx_str(const char *p)
@@ -97,6 +83,7 @@ void reinstate_line()	// Doskey functionality for one line only.
 			shell_tx(commandbuf[i]);
 		cbpos = buf_len;
 	}
+	new_command = false;
 }
 
 void clear_line()	// Inverse of the doskey, clear the line.
@@ -111,6 +98,7 @@ void clear_line()	// Inverse of the doskey, clear the line.
 		shell_tx_str("\x1B[D");
 	}
 	cbpos = 0;
+	new_command = true;
 }
 
 typedef enum { RX_NORMAL, RX_ESC, RX_ESC_BRACKET } rx_state_t;
@@ -159,14 +147,16 @@ void shell_rx(uint8_t c)
 		if (cbpos != 0)
 			dispatch();
 		cbpos = 0;
+		new_command = true;
 		shell_tx_str(SHELL_PROMPT);
 		return;
 	}
 
 	// In case a non return is typed
-	if (cbpos == 0)
+	if (new_command)
 		memset(commandbuf, 0, sizeof(commandbuf));
 	move_line_right(c);
+	new_command = false;
 }
 
 //====================================================================
@@ -176,7 +166,8 @@ void shell_rx(uint8_t c)
 #define COMMANDS \
 CMD(help, 		s_help, 	"Shows help") \
 CMD(version,	s_version, 	"Shows versions") \
-CMD(test,		s_test, 	"Test arguments")
+CMD(test,		s_test, 	"Test arguments") \
+CMD(clear,		s_clear, 	"Clear screen")
 
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
@@ -199,6 +190,17 @@ static const cmd_t commands[] =
 	#undef CMD
 	{NULL, NULL}
 };
+
+void detokenize(int cblen)
+{
+	char *p = commandbuf;
+	for (int j = cblen; j; j--)
+	{
+		if (*p == 0)
+			*p = ' ';
+		p++;
+	}
+}
 
 // Dispatcher. Reads from global state commandbuf, cbpos.
 void dispatch(void)
@@ -232,17 +234,12 @@ void dispatch(void)
 		if (strcmp(argv[0], commands[i].cmd) == 0)
 		{
 			commands[i].fnc(argc, argv);
-			p = commandbuf;
-			for (int j = cblen; j; j--)
-			{
-				if (*p == 0)
-					*p = ' ';
-				p++;
-			}
+			detokenize(cblen);
 			return;
 		}
 
 	shell_tx_str("Unknown command\r\n");
+	detokenize(cblen);
 }
 
 
@@ -327,7 +324,10 @@ void s_test(int argc, char **argv)
 	}
 }
 
-
+void s_clear(int argc, char **argv)
+{
+	shell_tx_str("\033[0;0H" "\033[0;0H");
+}
 
 
 

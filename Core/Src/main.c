@@ -115,13 +115,18 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  HAL_UART_RxCpltCallback(&huart1);			// Arm the interrupt chain once.
   while (1)
   {
+	  /*
+	  // Shell code for polling mode
 	  HAL_StatusTypeDef rv;
 	  uint8_t pData;
 	  rv = HAL_UART_Receive_IT(&huart1, &pData, 1);
 	  if (HAL_OK == rv)
 		  shell_rx(pData);
+	*/
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -398,6 +403,18 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	if (GPIO_PIN_0 == GPIO_Pin)
 		HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *h)
+{
+	if (h != &huart1)
+		return;
+
+	HAL_StatusTypeDef rv;
+	static uint8_t pData;
+	rv = HAL_UART_Receive_IT(&huart1, &pData, 1);
+	if (HAL_OK == rv)
+		shell_rx(pData);
 }
 
 /* USER CODE END 4 */
