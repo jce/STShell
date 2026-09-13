@@ -181,10 +181,11 @@ void shell_rx(uint8_t c)
 
 // Xmacro for commands. Members: command, function, helptext
 #define COMMANDS \
-CMD(help, 		s_help, 	"Shows help") \
-CMD(version,	s_version, 	"Shows versions") \
-CMD(test,		s_test, 	"Test arguments") \
-CMD(clear,		s_clear, 	"Clear screen")
+CMD(help, 		s_help, 	"Shows help.") \
+CMD(version,	s_version, 	"Shows versions.") \
+CMD(test,		s_test, 	"Test arguments.") \
+CMD(clear,		s_clear, 	"Clear screen.") \
+CMD(live,		s_live,		"Live view of peripherhals.")
 
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
@@ -346,9 +347,46 @@ void s_clear(int argc, char **argv)
 	shell_tx_str("\033[0;0H" "\033[2J");
 }
 
+// Live peripheral viewer. First version shows just GPIO as 0b0000000000000000
+void s_live_gpiosec(uint16_t gpio)
+{
+	for (int i=0; i < 16; i++)
+		shell_tx(gpio & (1U << i) ? '1' : '0');
+}
 
+void s_live_gpioline()
+{
+	shell_tx_str("\033[0;0H");
+	uint16_t port_a = GPIOA->IDR;  // Input Data Register, 16 bits
+	uint16_t port_b = GPIOB->IDR;
+	uint16_t port_c = GPIOC->IDR;
+	uint16_t port_d = GPIOD->IDR;
+	uint16_t port_e = GPIOE->IDR;
+	uint16_t port_f = GPIOF->IDR;
+	shell_tx_str("GPIO PORTx [0 1 2 ... 14 15]\r\n");
+	shell_tx_str("GPIOA: "); 	s_live_gpiosec(port_a);
+	shell_tx_str(" GPIOB: "); 	s_live_gpiosec(port_b);
+	shell_tx_str(" GPIOC: "); 	s_live_gpiosec(port_c);
+	shell_tx_str("\r\nGPIOD: ");s_live_gpiosec(port_d);
+	shell_tx_str(" GPIOE: "); 	s_live_gpiosec(port_e);
+	shell_tx_str(" GPIOF: "); 	s_live_gpiosec(port_f);
+	shell_tx_str("\r\n");
+}
 
+void s_live(int argc, char **argv)
+{
+	shell_tx_str("\033[2J");
+	while ( ! (USART1->ISR & USART_ISR_RXNE))
+	{
+		s_live_gpioline();
 
+		volatile uint32_t loop = 0;
+		while (loop < 500000)
+			loop++;
+	}
+	(void)USART1->RDR;
+	shell_tx_str("\033[0;0H" "\033[2J");
+}
 
 
 
