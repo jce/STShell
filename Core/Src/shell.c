@@ -50,13 +50,11 @@ void move_line_right(char c)	// For inserting characters at cbpos and moving the
 		shell_tx_str("\x1B[D");					// By sending back arrows.
 }
 
-void move_line_left()	// For deleting characters at cbpos, and moving the remainder of the line left.
+void delete()
 {
-	if (0 == cbpos)										// Cursor already leftmost? Done.
+	if (cbpos == strlen(commandbuf))
 		return;
 
-	cbpos--;											// Cursor to left.
-	shell_tx_str("\x1B[D");								// Displayed string: cursor to left.
 	char *line_right_of_cursor = commandbuf + cbpos;	// We are going to overwrite what is at the cursor.
 	int to_move = strlen(line_right_of_cursor);			// We also want to copy the first null character.
 	for (int i = 0; i < to_move; i++)
@@ -72,6 +70,16 @@ void move_line_left()	// For deleting characters at cbpos, and moving the remain
 	{
 		shell_tx_str("\x1B[D");
 	}
+}
+
+void backspace()	// For deleting characters at cbpos, and moving the remainder of the line left.
+{
+	if (0 == cbpos)										// Cursor already leftmost? Done.
+		return;
+
+	cbpos--;											// Cursor to left.
+	shell_tx_str("\x1B[D");								// Displayed string: cursor to left.
+	delete();
 }
 
 void reinstate_line()	// Doskey functionality for one line only.
@@ -101,7 +109,7 @@ void clear_line()	// Inverse of the doskey, clear the line.
 	new_command = true;
 }
 
-typedef enum { RX_NORMAL, RX_ESC, RX_ESC_BRACKET } rx_state_t;
+typedef enum { RX_NORMAL, RX_ESC, RX_ESC_BRACKET, RX_ESC_BRACKET_3 } rx_state_t;
 static rx_state_t rx_state = RX_NORMAL;
 void shell_rx(uint8_t c)
 {
@@ -121,6 +129,15 @@ void shell_rx(uint8_t c)
 		else if ('A' == c)	{ /* up arrow */ 	reinstate_line(); 	}
 		else if ('B' == c)	{ /* down arrow */ 	clear_line();		}
 		rx_state = RX_NORMAL;
+		 if		('3' == c)	{ rx_state = RX_ESC_BRACKET_3;			}
+		return;
+	}
+
+	if (RX_ESC_BRACKET_3 == rx_state)
+	{
+		if ('~' == c)
+			delete();
+		rx_state = RX_NORMAL;
 		return;
 	}
 
@@ -136,7 +153,7 @@ void shell_rx(uint8_t c)
 
 	if (0x7f == c || 0x08 == c)
 	{
-		move_line_left();
+		backspace();
 		return;
 	}
 
@@ -326,7 +343,7 @@ void s_test(int argc, char **argv)
 
 void s_clear(int argc, char **argv)
 {
-	shell_tx_str("\033[0;0H" "\033[0;0H");
+	shell_tx_str("\033[0;0H" "\033[2J");
 }
 
 
