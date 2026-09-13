@@ -1,15 +1,17 @@
-#include "stm32f3xx_hal.h"	// Fixes uint8_t being unknown.
-#include "shell.h"
-#include <string.h>	// strlen, strcmp
 #include <stdio.h>	// sprintf
 #include "stdbool.h"
+#include "stm32f3xx_hal.h"	// Fixes uint8_t being unknown.
+#include <string.h>	// strlen, strcmp
+
+#include "shell.h"
+#include "shell_util.h"
 //======================================================================
 // Line editor logic
 
-void (*shell_tx)(uint8_t); // Transmit function for one character
+void (*shell_tx)(char); // Transmit function for one character
 void shell_register_tx(void (*_shell_tx)(uint8_t))
 {
-	shell_tx = _shell_tx;
+	shell_tx = (void (*)(char)) _shell_tx;
 }
 
 char commandbuf[CBLEN+1] = {0};	// Command buffer
@@ -26,15 +28,13 @@ void shell_tx_str(const char *p)
 	}
 }
 
-void dispatch();
-
 void move_line_right(char c)	// For inserting characters at cbpos and moving the remainder of the line right.
 {
 	if (cbpos >= CBLEN)							// Refuse new characters if the string is full.
 		return;
 
 	char *tail = commandbuf + cbpos;			// The tail is the section that will be moved
-	int tail_len = strlen(tail);				// It has a length
+	int tail_len = strlen((char*) tail);				// It has a length
 
 	for (int i = tail_len; i>=0; i--)			// Move the tail to make space.
 		if (i+1+cbpos < CBLEN)					// Drop section of the tail that is too long.
@@ -43,7 +43,7 @@ void move_line_right(char c)	// For inserting characters at cbpos and moving the
 	commandbuf[cbpos] = c;						// Place our character in the newly available slot
 	cbpos++;									// Increment cursor (potentially hitting CBLEN)
 
-	int keep_tail = strlen(commandbuf+cbpos);	// The tail length may have changed
+	int keep_tail = strlen((char*) commandbuf+cbpos);	// The tail length may have changed
 	shell_tx_str(commandbuf+cbpos-1);			// Print our new character c plus the tail
 
 	for (int i = keep_tail; i > 0; i--)			// Snap back the tail length
@@ -185,7 +185,8 @@ CMD(help, 		s_help, 	"Shows help.") \
 CMD(version,	s_version, 	"Shows versions.") \
 CMD(test,		s_test, 	"Test arguments.") \
 CMD(clear,		s_clear, 	"Clear screen.") \
-CMD(live,		s_live,		"Live view of peripherhals.")
+CMD(live,		s_live,		"Live view of peripherhals.") \
+CMD(rd,			s_read,		"[begin [length]] Read memory location")
 
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
@@ -389,6 +390,46 @@ void s_live(int argc, char **argv)
 }
 
 
+void s_read(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+        shell_tx_str("Usage: rd <address> [length_bytes]\r\n");
+        return;
+    }
+
+    uint32_t addr = s_atoi_hex(argv[1]);
+    uint32_t length = 8;  // default 8 bytes = 1 regel
+
+    if (argc >= 3)
+    	length = s_atoi_hex(argv[2]);
+
+    if (length > 256)
+        length = 256;
+
+    // Align op 8 bytes
+    uint32_t aligned = addr & ~3U;
+    uint32_t end = aligned + ((length + (addr - aligned) + 3) & ~3U);
+
+    shell_tx_str("\r\n");
+
+    for (uint32_t a = aligned; a < end; a += 8)
+    {
+        uint8_t buf[8];
+        volatile uint32_t *p32 = (volatile uint32_t *)a;
+
+        // 2 x 32-bit aligned read = 8 bytes
+        uint32_t w0 = p32[0];
+        uint32_t w1 = p32[1];
+
+        buf[0] = w0;        buf[1] = w0 >> 8;
+        buf[2] = w0 >> 16;  buf[3] = w0 >> 24;
+        buf[4] = w1;        buf[5] = w1 >> 8;
+        buf[6] = w1 >> 16;  buf[7] = w1 >> 24;
+
+        s_rd_hex_line(a, buf, 8);
+    }
+}
 
 
 
