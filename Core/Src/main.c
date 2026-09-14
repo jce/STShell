@@ -71,6 +71,8 @@ static void MX_USB_PCD_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+
+
 /* USER CODE END 0 */
 
 /**
@@ -109,6 +111,9 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   shell_register_tx(UART1_TX);
+
+
+  stack_paint();
 
 
   /* USER CODE END 2 */
@@ -415,6 +420,19 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *h)
 	rv = HAL_UART_Receive_IT(&huart1, &pData, 1);
 	if (HAL_OK == rv)
 		shell_rx(pData);
+}
+
+// Vul stack met pattern (bij opstarten)
+extern uint32_t _estack;
+extern uint32_t _Min_Stack_Size;
+void stack_paint(void)
+{
+    uint32_t *p = (uint32_t *)((uint32_t)&_estack - (uint32_t) &_Min_Stack_Size);
+    while (p < (uint32_t *)&_estack)
+    {
+        *p = 0x23232323;
+        p++;
+    }
 }
 
 /* USER CODE END 4 */

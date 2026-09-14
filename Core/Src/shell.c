@@ -3,6 +3,7 @@
 #include "stm32f3xx_hal.h"	// Fixes uint8_t being unknown.
 #include <string.h>	// strlen, strcmp
 
+#include "main.h"
 #include "shell.h"
 #include "shell_util.h"
 //======================================================================
@@ -186,8 +187,8 @@ CMD(version,	s_version, 	"Shows versions.") \
 CMD(test,		s_test, 	"Test arguments.") \
 CMD(clear,		s_clear, 	"Clear screen.") \
 CMD(live,		s_live,		"Live view of peripherhals.") \
-CMD(rd,			s_read,		"[begin [length]] Read memory location")
-
+CMD(rd,			s_read,		"[begin [length]] Read memory location") \
+CMD(stack,		s_stack,	"[paint, show] display stack max usage.")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -390,6 +391,37 @@ void s_live(int argc, char **argv)
 }
 
 
+void s_read_2(int addr, int length)
+{
+    // Align op 4 bytes (32-bit read boundary)
+    uint32_t aligned = addr & ~3U;
+    uint32_t end = aligned + ((length + (addr - aligned) + 3) & ~3U);
+
+    shell_tx_str("\r\n");
+
+    for (uint32_t a = aligned; a < end; a += 32)
+    {
+        uint8_t buf[32];
+        uint32_t remaining = end - a;
+        uint32_t line_len = remaining < 32 ? remaining : 32;
+
+        // 32-bit aligned reads, 4 per regel max
+        volatile uint32_t *p32 = (volatile uint32_t *)a;
+        uint32_t words = (line_len + 3) / 4;
+
+        for (uint32_t w = 0; w < words; w++)
+        {
+            uint32_t val = p32[w];
+            buf[w*4]   = val;
+            buf[w*4+1] = val >> 8;
+            buf[w*4+2] = val >> 16;
+            buf[w*4+3] = val >> 24;
+        }
+
+        s_rd_hex_line(a, buf, line_len);
+    }
+}
+
 void s_read(int argc, char **argv)
 {
     if (argc < 2)
@@ -399,43 +431,45 @@ void s_read(int argc, char **argv)
     }
 
     uint32_t addr = s_atoi_hex(argv[1]);
-    uint32_t length = 8;  // default 8 bytes = 1 regel
+    uint32_t length = 0x100;  // default 256 bytes = 4 regels
 
     if (argc >= 3)
-    	length = s_atoi_hex(argv[2]);
+        length = s_atoi_hex(argv[2]);
 
-    if (length > 256)
-        length = 256;
+    //if (length > 256)
+    //    length = 256;
 
-    // Align op 8 bytes
-    uint32_t aligned = addr & ~3U;
-    uint32_t end = aligned + ((length + (addr - aligned) + 3) & ~3U);
-
-    shell_tx_str("\r\n");
-
-    for (uint32_t a = aligned; a < end; a += 8)
-    {
-        uint8_t buf[8];
-        volatile uint32_t *p32 = (volatile uint32_t *)a;
-
-        // 2 x 32-bit aligned read = 8 bytes
-        uint32_t w0 = p32[0];
-        uint32_t w1 = p32[1];
-
-        buf[0] = w0;        buf[1] = w0 >> 8;
-        buf[2] = w0 >> 16;  buf[3] = w0 >> 24;
-        buf[4] = w1;        buf[5] = w1 >> 8;
-        buf[6] = w1 >> 16;  buf[7] = w1 >> 24;
-
-        s_rd_hex_line(a, buf, 8);
-    }
+    s_read_2(addr, length);
 }
 
+extern uint32_t _estack;
+extern uint32_t* _Min_Stack_Size;
+void s_stack(int argc, char **argv)
+{
+	if (argc >=2)
+	{
+		if (strcmp(argv[1], "paint") == 0)
+			stack_paint();
+		if (strcmp(argv[1], "show") == 0)
+			s_read_2(0x10000000, 0x2000);
+		return;
+	}
 
+	//uint32_t estack = &_estack;
+	uint32_t sz = (uint32_t) &_Min_Stack_Size;
+    uint32_t *p = (uint32_t *)((uint32_t)&_estack - sz);
+    while (*p == 0x23232323) p++;
+    uint32_t size =  (uint32_t)&_estack - (uint32_t)p;
 
+    char buf[32];
+    sprintf(buf, "Stack: %0ld\r\n", size);
+    shell_tx_str(buf);
+}
 
-
-
+void s_paint(int argc, char **argv)
+{
+	stack_paint();
+}
 
 
 

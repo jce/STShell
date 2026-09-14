@@ -102,22 +102,19 @@ void shell_tx_hex(uint32_t val)
 //    while (1);
 //}
 
-
+// Written by Mistral
 void s_rd_hex_line(uint32_t addr, uint8_t *data, uint32_t len)
 {
     // Address
-    shell_tx_str("0x");
-    for (int i = 7; i >= 0; i--)
-    {
-        uint8_t nib = (addr >> (i * 4)) & 0xF;
-        shell_tx(nib < 10 ? '0' + nib : 'A' + nib - 10);
-    }
+    shell_tx_hex(addr);
 
     shell_tx_str(": ");
 
     // Hex bytes
     for (uint32_t i = 0; i < len; i++)
     {
+    	if ((i & 0x7) == 0)	// Extra spatie na 8 bytes voor leesbaarheid;
+    		shell_tx(' ');
         uint8_t hi = (data[i] >> 4) & 0xF;
         uint8_t lo = data[i] & 0xF;
         shell_tx(hi < 10 ? '0' + hi : 'A' + hi - 10);
@@ -125,17 +122,24 @@ void s_rd_hex_line(uint32_t addr, uint8_t *data, uint32_t len)
         shell_tx(' ');
     }
 
-    // Padding als len < 8
-    for (uint32_t i = len; i < 8; i++)
+    // Padding als len < 16
+    for (uint32_t i = len; i < 16; i++)
+    {
         shell_tx_str("   ");
+        if (i == 7)
+            shell_tx(' ');
+    }
 
     // ASCII
-    shell_tx(' ');
+    shell_tx_str(" |");
     for (uint32_t i = 0; i < len; i++)
     {
         shell_tx(data[i] >= 0x20 && data[i] < 0x7F ? data[i] : '.');
     }
-    shell_tx_str("\r\n");
+    // Padding ASCII
+    for (uint32_t i = len; i < 16; i++)
+        shell_tx(' ');
+    shell_tx_str("|\r\n");
 }
 
 uint32_t s_atoi_hex(const char *s)

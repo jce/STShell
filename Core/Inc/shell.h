@@ -9,7 +9,7 @@
 #define INC_SHELL_H_
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.1.3"
+#define SHELL_VER "0.1.4"
 
 
 void shell_rx(uint8_t);	// Receive a character. Whole processing hangs on this one function

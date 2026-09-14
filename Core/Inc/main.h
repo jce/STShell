@@ -114,6 +114,10 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 
+
+void stack_paint(void);
+
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
