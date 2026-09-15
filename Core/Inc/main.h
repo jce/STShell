@@ -38,9 +38,10 @@ extern "C" {
 /* USER CODE BEGIN ET */
 
 extern ADC_HandleTypeDef hadc1;
-extern ADC_HandleTypeDef hadc2;
-extern ADC_HandleTypeDef hadc3;
-extern ADC_HandleTypeDef hadc4;
+//extern ADC_HandleTypeDef hadc2;
+//extern ADC_HandleTypeDef hadc3;
+//extern ADC_HandleTypeDef hadc4;
+extern uint16_t adc1buf[16];
 
 /* USER CODE END ET */
 

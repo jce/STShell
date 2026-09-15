@@ -168,15 +168,16 @@ uint32_t s_atoi_hex(const char *s)
 
 int32_t get_Vrefint()
 {
-	ADC_ChannelConfTypeDef channelconfig = {0};
-	channelconfig.Channel = ADC_CHANNEL_VREFINT;
-	channelconfig.Rank = ADC_REGULAR_RANK_1;
-	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
-	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
-
-	HAL_ADC_Start(&hadc1);
-	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-	return HAL_ADC_GetValue(&hadc1);
+//	ADC_ChannelConfTypeDef channelconfig = {0};
+//	channelconfig.Channel = ADC_CHANNEL_VREFINT;
+//	channelconfig.Rank = ADC_REGULAR_RANK_1;
+//	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+//	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+//
+//	HAL_ADC_Start(&hadc1);
+//	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+//	return HAL_ADC_GetValue(&hadc1);
+	return adc1buf[11];
 }
 
 #define REFINT_VDDA 3300		// [mV]
@@ -195,15 +196,16 @@ int32_t get_vdda()
 // Gets temperature in 0.1 degC
 int32_t get_temp()
 {
-	ADC_ChannelConfTypeDef channelconfig = {0};
-	channelconfig.Channel = ADC_CHANNEL_TEMPSENSOR;
-	channelconfig.Rank = ADC_REGULAR_RANK_1;
-	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
-	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
-
-	HAL_ADC_Start(&hadc1);
-	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
+//	ADC_ChannelConfTypeDef channelconfig = {0};
+//	channelconfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+//	channelconfig.Rank = ADC_REGULAR_RANK_1;
+//	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+//	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+//
+//	HAL_ADC_Start(&hadc1);
+//	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+//	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
+	uint32_t adc_val = adc1buf[10];
 
 	// VSense can have quite a range, from the datasheet. Made
 	// a hardcoded calibration here. Its not correct, i know,
@@ -227,38 +229,40 @@ int32_t get_temp()
 // Gets Vbat in mV
 int32_t get_vbat()
 {
-	ADC_ChannelConfTypeDef channelconfig = {0};
-	channelconfig.Channel = ADC_CHANNEL_VBAT;
-	channelconfig.Rank = ADC_REGULAR_RANK_1;
-	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
-	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+//	ADC_ChannelConfTypeDef channelconfig = {0};
+//	channelconfig.Channel = ADC_CHANNEL_VBAT;
+//	channelconfig.Rank = ADC_REGULAR_RANK_1;
+//	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+//	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+//
+//	HAL_ADC_Start(&hadc1);
+//	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+//	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
 
-	HAL_ADC_Start(&hadc1);
-	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
-
+	uint32_t adc_val = adc1buf[12];
 	return adc_val * get_vdda() * 2 / 4095;
 }
 
 int32_t get_adc(ADC_HandleTypeDef* adc, uint32_t channel)
 {
-	if (channel > 18)
+	if (channel > 16)
 		return 0;
 
 	if (channel < 1)
 		return 0;
 
-	ADC_ChannelConfTypeDef channelconfig = {0};
-	channelconfig.Channel = ADC_CHANNEL_1 + (channel-1);
-	channelconfig.Rank = ADC_REGULAR_RANK_1;
-	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
-	HAL_ADC_ConfigChannel(adc, &channelconfig);
-
-	HAL_ADC_Start(adc);
-	HAL_ADC_PollForConversion(adc, HAL_MAX_DELAY);
-	uint32_t adc_val = HAL_ADC_GetValue(adc);
-
-	return adc_val ;
+//	ADC_ChannelConfTypeDef channelconfig = {0};
+//	channelconfig.Channel = ADC_CHANNEL_1 + (channel-1);
+//	channelconfig.Rank = ADC_REGULAR_RANK_1;
+//	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+//	HAL_ADC_ConfigChannel(adc, &channelconfig);
+//
+//	HAL_ADC_Start(adc);
+//	HAL_ADC_PollForConversion(adc, HAL_MAX_DELAY);
+//	uint32_t adc_val = HAL_ADC_GetValue(adc);
+//
+//	return adc_val ;
+	return adc1buf[channel-1];
 }
 
 

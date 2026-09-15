@@ -405,9 +405,9 @@ void s_live(int argc, char **argv)
 		s_live_gpioline();
 		s_live_temp_vbat_vref_line();
 		s_adc_line(&hadc1);
-		s_adc_line(&hadc2);
-		s_adc_line(&hadc3);
-		s_adc_line(&hadc4);
+//		s_adc_line(&hadc2);
+//		s_adc_line(&hadc3);
+//		s_adc_line(&hadc4);
 
 		volatile uint32_t loop = 0;
 		while (loop < 500000)
