@@ -166,6 +166,32 @@ uint32_t s_atoi_hex(const char *s)
     return val;
 }
 
+int32_t get_Vrefint()
+{
+	ADC_ChannelConfTypeDef channelconfig = {0};
+	channelconfig.Channel = ADC_CHANNEL_VREFINT;
+	channelconfig.Rank = ADC_REGULAR_RANK_1;
+	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+
+	HAL_ADC_Start(&hadc1);
+	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+	return HAL_ADC_GetValue(&hadc1);
+}
+
+#define REFINT_VDDA 3300		// [mV]
+#define VREFINT_CAL (* (uint16_t*)0x1FFFF7BA) // ADC readout at 3300 mV, 30 degC
+
+// Gets vdda ( from VRef )
+int32_t get_vdda()
+{
+	// VREFINT_CAL / Vrefint_actual vangt de verschaling voor het verschil met de voedingsspanning.
+	return REFINT_VDDA * VREFINT_CAL / get_Vrefint();
+}
+
+#define TS_V25		1.395f
+#define TS_SLOPE_C	(-0.0043)
+
 // Gets temperature in 0.1 degC
 int32_t get_temp()
 {
@@ -179,17 +205,24 @@ int32_t get_temp()
 	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
 	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
 
-	#define TS_CAL1  (*(uint16_t *)0x1FFFF7B8)  // 30°C
-	#define TS_CAL2  (*(uint16_t *)0x1FFFF7C2)  // 110°C
-	#define TS_CAL1_TEMP  30
-	#define TS_CAL2_TEMP  110
-	int32_t temp_x10 = (110 - 30) * 10 * ((int32_t) adc_val - TS_CAL1) /
-			(TS_CAL2 - TS_CAL1) + 30 * 10;
-	// temp_x10 / 10 = graden, temp_x10 % 10 = tienden
-	return temp_x10;
-}
+	// VSense can have quite a range, from the datasheet. Made
+	// a hardcoded calibration here. Its not correct, i know,
+	// having magic numbers, and not backed by any source other
+	// than experimentation.
+	float vSense = (float) adc_val * get_vdda() / 4095 / 1000;
+	float temp = (vSense - TS_V25) / TS_SLOPE_C + 25;
+	return temp*10;
 
-#define VREF 2945	// [mV]
+	// This does not work. Gives about 10 degC too low.
+//	#define TS_CAL1  (*(uint16_t *)0x1FFFF7B8)  // 30°C
+//	#define TS_CAL2  (*(uint16_t *)0x1FFFF7C2)  // 110°C
+//	#define TS_CAL1_TEMP  30
+//	#define TS_CAL2_TEMP  110
+//	adc_val = adc_val * VREFINT_CAL / get_Vrefint();
+//	int32_t temp_x10 = (TS_CAL2_TEMP - TS_CAL1_TEMP) * 10 * ((int32_t) adc_val - TS_CAL1) /
+//			(TS_CAL2 - TS_CAL1) + TS_CAL1_TEMP * 10;
+//	return temp_x10;
+}
 
 // Gets Vbat in mV
 int32_t get_vbat()
@@ -204,23 +237,7 @@ int32_t get_vbat()
 	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
 	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
 
-	return adc_val * VREF / 4095;
-}
-
-// Gets vref in mV
-int32_t get_vref()
-{
-	ADC_ChannelConfTypeDef channelconfig = {0};
-	channelconfig.Channel = ADC_CHANNEL_VREFINT;
-	channelconfig.Rank = ADC_REGULAR_RANK_1;
-	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
-	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
-
-	HAL_ADC_Start(&hadc1);
-	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
-
-	return adc_val * VREF / 4095;
+	return adc_val * get_vdda() * 2 / 4095;
 }
 
 int32_t get_adc(ADC_HandleTypeDef* adc, uint32_t channel)
@@ -232,10 +249,10 @@ int32_t get_adc(ADC_HandleTypeDef* adc, uint32_t channel)
 		return 0;
 
 	ADC_ChannelConfTypeDef channelconfig = {0};
-	channelconfig.Channel = ADC_CHANNEL_1 + channel;
+	channelconfig.Channel = ADC_CHANNEL_1 + (channel-1);
 	channelconfig.Rank = ADC_REGULAR_RANK_1;
 	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
-	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+	HAL_ADC_ConfigChannel(adc, &channelconfig);
 
 	HAL_ADC_Start(adc);
 	HAL_ADC_PollForConversion(adc, HAL_MAX_DELAY);

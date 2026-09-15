@@ -377,12 +377,12 @@ void s_live_gpioline()
 
 void s_live_temp_vbat_vref_line()
 {
+	int32_t vdda = get_vdda();
 	int32_t temp = get_temp();
 	int32_t vbat = get_vbat();
-	int32_t vref = get_vref();
-	char buf[64];
+	char buf[128];
 
-	sprintf(buf, "Temperature: %3ld [0.1 degC] Vbat: %4ld [mV] Vref: %4ld [mV]\r\n", temp, vbat, vref);
+	sprintf(buf, "Vcc = %4ld [mv] Temperature: %3ld [0.1 degC] Vbat: %4ld [mV]\r\n", vdda, temp, vbat);
 	shell_tx_str(buf);
 }
 
@@ -399,7 +399,7 @@ void s_adc_line(ADC_HandleTypeDef* adc)
 
 void s_live(int argc, char **argv)
 {
-	shell_tx_str("\033[2J");
+	shell_tx_str("\x1b[?25l" "\033[2J"); // Cursur hide, home.
 	while ( ! (USART1->ISR & USART_ISR_RXNE))
 	{
 		s_live_gpioline();
@@ -414,7 +414,7 @@ void s_live(int argc, char **argv)
 			loop++;
 	}
 	(void)USART1->RDR;
-	shell_tx_str("\033[0;0H" "\033[2J");
+	shell_tx_str("\x1b[?25h" "\033[0;0H" "\033[2J"); // Cursor aan, home, clearscreen.
 }
 
 
