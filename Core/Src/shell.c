@@ -375,12 +375,39 @@ void s_live_gpioline()
 	shell_tx_str("\r\n");
 }
 
+void s_live_temp_vbat_vref_line()
+{
+	int32_t temp = get_temp();
+	int32_t vbat = get_vbat();
+	int32_t vref = get_vref();
+	char buf[64];
+
+	sprintf(buf, "Temperature: %3ld [0.1 degC] Vbat: %4ld [mV] Vref: %4ld [mV]\r\n", temp, vbat, vref);
+	shell_tx_str(buf);
+}
+
+void s_adc_line(ADC_HandleTypeDef* adc)
+{
+	char buf[16];
+	for (int i = 1; i <= 18; i++)
+	{
+		sprintf(buf, "%4ld ", get_adc(adc, i));
+		shell_tx_str(buf);
+	}
+	shell_tx_str("\r\n");
+}
+
 void s_live(int argc, char **argv)
 {
 	shell_tx_str("\033[2J");
 	while ( ! (USART1->ISR & USART_ISR_RXNE))
 	{
 		s_live_gpioline();
+		s_live_temp_vbat_vref_line();
+		s_adc_line(&hadc1);
+		//s_adc_line(&hadc2);
+		//s_adc_line(&hadc3);
+		//s_adc_line(&hadc4);
 
 		volatile uint32_t loop = 0;
 		while (loop < 500000)

@@ -165,3 +165,100 @@ uint32_t s_atoi_hex(const char *s)
     }
     return val;
 }
+
+// Gets temperature in 0.1 degC
+int32_t get_temp()
+{
+	ADC_ChannelConfTypeDef channelconfig = {0};
+	channelconfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+	channelconfig.Rank = ADC_REGULAR_RANK_1;
+	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+
+	HAL_ADC_Start(&hadc1);
+	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
+
+	#define TS_CAL1  (*(uint16_t *)0x1FFFF7B8)  // 30°C
+	#define TS_CAL2  (*(uint16_t *)0x1FFFF7C2)  // 110°C
+	#define TS_CAL1_TEMP  30
+	#define TS_CAL2_TEMP  110
+	int32_t temp_x10 = (110 - 30) * 10 * ((int32_t) adc_val - TS_CAL1) /
+			(TS_CAL2 - TS_CAL1) + 30 * 10;
+	// temp_x10 / 10 = graden, temp_x10 % 10 = tienden
+	return temp_x10;
+}
+
+#define VREF 2945	// [mV]
+
+// Gets Vbat in mV
+int32_t get_vbat()
+{
+	ADC_ChannelConfTypeDef channelconfig = {0};
+	channelconfig.Channel = ADC_CHANNEL_VBAT;
+	channelconfig.Rank = ADC_REGULAR_RANK_1;
+	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+
+	HAL_ADC_Start(&hadc1);
+	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
+
+	return adc_val * VREF / 4095;
+}
+
+// Gets vref in mV
+int32_t get_vref()
+{
+	ADC_ChannelConfTypeDef channelconfig = {0};
+	channelconfig.Channel = ADC_CHANNEL_VREFINT;
+	channelconfig.Rank = ADC_REGULAR_RANK_1;
+	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+
+	HAL_ADC_Start(&hadc1);
+	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+	uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
+
+	return adc_val * VREF / 4095;
+}
+
+int32_t get_adc(ADC_HandleTypeDef* adc, uint32_t channel)
+{
+	if (channel > 18)
+		return 0;
+
+	if (channel < 1)
+		return 0;
+
+	ADC_ChannelConfTypeDef channelconfig = {0};
+	channelconfig.Channel = ADC_CHANNEL_1 + channel;
+	channelconfig.Rank = ADC_REGULAR_RANK_1;
+	channelconfig.SamplingTime = ADC_SAMPLETIME_601CYCLES_5;
+	HAL_ADC_ConfigChannel(&hadc1, &channelconfig);
+
+	HAL_ADC_Start(adc);
+	HAL_ADC_PollForConversion(adc, HAL_MAX_DELAY);
+	uint32_t adc_val = HAL_ADC_GetValue(adc);
+
+	return adc_val ;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
