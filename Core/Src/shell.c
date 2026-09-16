@@ -3,6 +3,7 @@
 #include "stm32f3xx_hal.h"	// Fixes uint8_t being unknown.
 #include <string.h>	// strlen, strcmp
 
+#include "LSM303AGR.h"
 #include "main.h"
 #include "shell.h"
 #include "shell_util.h"
@@ -188,7 +189,9 @@ CMD(test,		s_test, 	"Test arguments.") \
 CMD(clear,		s_clear, 	"Clear screen.") \
 CMD(live,		s_live,		"Live view of peripherhals.") \
 CMD(rd,			s_read,		"[begin [length]] Read memory location") \
-CMD(stack,		s_stack,	"[paint, show] display stack max usage.")
+CMD(stack,		s_stack,	"[paint, show] display stack max usage.") \
+CMD(mag,		s_mag,		"shows magnetometer readout") \
+CMD(lin,		s_lin,		"shows linear accelerometer readout")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -499,7 +502,41 @@ void s_paint(int argc, char **argv)
 }
 
 
+uint8_t read_mag_reg(uint8_t addr, uint8_t reg)
+{
+	uint8_t rv;
+	HAL_StatusTypeDef hrv;
+	hrv = HAL_I2C_Master_Transmit(&hi2c1, addr, &reg, 1, HAL_MAX_DELAY);
+	if (hrv == HAL_OK)
+	{
+		hrv = HAL_I2C_Master_Receive(&hi2c1, addr, &rv, 1, HAL_MAX_DELAY);
+		if (hrv == HAL_OK)
+			return rv;
+	}
+	return 0xFE;
+}
 
+void s_mag(int argc, char **argv)
+{
+	char buf[32];
+	for (int i = 0; i < 0x100; i++)
+	{
+		uint8_t rv = read_mag_reg(LSM303AGR_ADDR_M + 0, i);
+		sprintf(buf, "%3X %3X %3X\r\n", LSM303AGR_ADDR_M>>1, i, rv);
+		shell_tx_str(buf);
+	}
+}
+
+void s_lin(int argc, char **argv)
+{
+	char buf[32];
+	for (int i = 0; i < 0x100; i++)
+	{
+		uint8_t rv = read_mag_reg(LSM303AGR_ADDR_A + 0, i);
+		sprintf(buf, "%3X %3X %3X\r\n", LSM303AGR_ADDR_A>>1, i, rv);
+		shell_tx_str(buf);
+	}
+}
 
 
 

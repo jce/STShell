@@ -28,7 +28,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f3xx_hal.h"
-
+#include "LSM303AGR.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -42,6 +42,7 @@ extern ADC_HandleTypeDef hadc1;
 //extern ADC_HandleTypeDef hadc3;
 //extern ADC_HandleTypeDef hadc4;
 extern uint16_t adc1buf[16];
+extern I2C_HandleTypeDef hi2c1;
 
 /* USER CODE END ET */
 
@@ -116,9 +117,8 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 
-
 void stack_paint(void);
-
+void init_LSM303AGR();
 
 /* USER CODE END Private defines */
 

@@ -118,10 +118,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   shell_register_tx(UART1_TX);
-
-
   stack_paint();
-
+  init_LSM303AGR();
 
   /* USER CODE END 2 */
 
@@ -131,7 +129,6 @@ int main(void)
 
 
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc1buf, 16);
-
 
   while (1)
   {
@@ -668,6 +665,20 @@ void stack_paint(void)
         p++;
     }
 }
+
+// Init de LSM303AGR
+void init_LSM303AGR()
+{
+	uint8_t reg[2];
+	reg[0] = TEMP_CFG_REG_A;reg[1] = 0b11000000; HAL_I2C_Master_Transmit(&hi2c1, LSM303AGR_ADDR_A, reg, 2, HAL_MAX_DELAY);
+	reg[0] = CTRL_REG1_A; 	reg[1] = 0b01010111; HAL_I2C_Master_Transmit(&hi2c1, LSM303AGR_ADDR_A, reg, 2, HAL_MAX_DELAY);
+	reg[0] = CTRL_REG4_A; 	reg[1] = 0b10000000; HAL_I2C_Master_Transmit(&hi2c1, LSM303AGR_ADDR_A, reg, 2, HAL_MAX_DELAY);
+
+
+
+
+}
+
 
 /* USER CODE END 4 */
 
