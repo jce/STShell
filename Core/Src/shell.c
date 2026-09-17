@@ -400,6 +400,15 @@ void s_adc_line(ADC_HandleTypeDef* adc)
 	shell_tx_str("\r\n");
 }
 
+void s_line_LSM303AGR()
+{
+	char buf[32];
+	float temp = LSM303AGR_get_temp();
+	int temp_i = temp * 10;
+	sprintf(buf, "LSM303AGR Temp: %4d\r\n", temp_i);
+	shell_tx_str(buf);
+}
+
 void s_live(int argc, char **argv)
 {
 	shell_tx_str("\x1b[?25l" "\033[2J"); // Cursur hide, home.
@@ -408,6 +417,7 @@ void s_live(int argc, char **argv)
 		s_live_gpioline();
 		s_live_temp_vbat_vref_line();
 		s_adc_line(&hadc1);
+		s_line_LSM303AGR();
 //		s_adc_line(&hadc2);
 //		s_adc_line(&hadc3);
 //		s_adc_line(&hadc4);
@@ -506,10 +516,10 @@ uint8_t read_mag_reg(uint8_t addr, uint8_t reg)
 {
 	uint8_t rv;
 	HAL_StatusTypeDef hrv;
-	hrv = HAL_I2C_Master_Transmit(&hi2c1, addr, &reg, 1, HAL_MAX_DELAY);
+	hrv = HAL_I2C_Master_Transmit(&hi2c1, addr, &reg, 1, 100);
 	if (hrv == HAL_OK)
 	{
-		hrv = HAL_I2C_Master_Receive(&hi2c1, addr, &rv, 1, HAL_MAX_DELAY);
+		hrv = HAL_I2C_Master_Receive(&hi2c1, addr, &rv, 1, 100);
 		if (hrv == HAL_OK)
 			return rv;
 	}
@@ -521,7 +531,7 @@ void s_mag(int argc, char **argv)
 	char buf[32];
 	for (int i = 0; i < 0x100; i++)
 	{
-		uint8_t rv = read_mag_reg(LSM303AGR_ADDR_M + 0, i);
+		uint8_t rv = read_mag_reg(LSM303AGR_ADDR_M, i);
 		sprintf(buf, "%3X %3X %3X\r\n", LSM303AGR_ADDR_M>>1, i, rv);
 		shell_tx_str(buf);
 	}
@@ -532,7 +542,7 @@ void s_lin(int argc, char **argv)
 	char buf[32];
 	for (int i = 0; i < 0x100; i++)
 	{
-		uint8_t rv = read_mag_reg(LSM303AGR_ADDR_A + 0, i);
+		uint8_t rv = read_mag_reg(LSM303AGR_ADDR_A, i);
 		sprintf(buf, "%3X %3X %3X\r\n", LSM303AGR_ADDR_A>>1, i, rv);
 		shell_tx_str(buf);
 	}

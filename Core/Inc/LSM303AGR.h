@@ -75,4 +75,7 @@
 #define OUTZ_L_REG_M		0x6C
 #define OUTZ_H_REG_M		0x6D
 
+void init_LSM303AGR();
+float LSM303AGR_get_temp();	// Gets temperature in degC, polling mode.
+
 #endif /* INC_LSM303AGR_H_ */

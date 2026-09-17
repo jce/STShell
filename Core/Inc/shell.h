@@ -19,6 +19,8 @@ extern void (*shell_tx)(char); // Transmit function for one character
 void shell_tx_str(const char*);
 void dispatch();
 
+// Temporary, for a test
+uint8_t read_mag_reg(uint8_t addr, uint8_t reg);
 
 #define CBLEN 64				// Command Buffer Length
 #define AVLEN 8			// The argument vector maximum length

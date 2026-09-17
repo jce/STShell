@@ -666,18 +666,7 @@ void stack_paint(void)
     }
 }
 
-// Init de LSM303AGR
-void init_LSM303AGR()
-{
-	uint8_t reg[2];
-	reg[0] = TEMP_CFG_REG_A;reg[1] = 0b11000000; HAL_I2C_Master_Transmit(&hi2c1, LSM303AGR_ADDR_A, reg, 2, HAL_MAX_DELAY);
-	reg[0] = CTRL_REG1_A; 	reg[1] = 0b01010111; HAL_I2C_Master_Transmit(&hi2c1, LSM303AGR_ADDR_A, reg, 2, HAL_MAX_DELAY);
-	reg[0] = CTRL_REG4_A; 	reg[1] = 0b10000000; HAL_I2C_Master_Transmit(&hi2c1, LSM303AGR_ADDR_A, reg, 2, HAL_MAX_DELAY);
 
-
-
-
-}
 
 
 /* USER CODE END 4 */
