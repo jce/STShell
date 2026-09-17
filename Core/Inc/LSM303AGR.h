@@ -8,8 +8,12 @@
 #ifndef INC_LSM303AGR_H_
 #define INC_LSM303AGR_H_
 
+#include "main.h"
+
 #define LSM303AGR_ADDR_A 	(0b0011001 << 1)
 #define LSM303AGR_ADDR_M	(0b0011110 << 1)
+
+#define I2C_TIMEOUT			100
 
 #define STATUS_REG_AUX_A	0x07
 #define OUT_TEMP_L_A		0x0C
@@ -75,7 +79,23 @@
 #define OUTZ_L_REG_M		0x6C
 #define OUTZ_H_REG_M		0x6D
 
-void init_LSM303AGR();
-float LSM303AGR_get_temp();	// Gets temperature in degC, polling mode.
+HAL_StatusTypeDef init_LSM303AGR(void);
+void LSM303AGR_10ms_int(void);
+void LSM303AGR_I2C_Callback(void);
+void LSM303AGR_I2C_Err_Callback(void);
+
+struct S_LSM303AGRXYZ {
+	float x;
+	float y;
+	float z;
+};
+struct S_LSM303AGR {				// Let op, structure is niet atomic geschreven.
+		float temp;					// Temperature in [degC]
+		struct S_LSM303AGRXYZ acc;	// Acceleration in [G]
+		struct S_LSM303AGRXYZ mag;	// Magnetic field in [Gauss]
+};
+extern struct S_LSM303AGR lsm303agr;
+
+
 
 #endif /* INC_LSM303AGR_H_ */

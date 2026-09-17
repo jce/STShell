@@ -402,10 +402,12 @@ void s_adc_line(ADC_HandleTypeDef* adc)
 
 void s_line_LSM303AGR()
 {
-	char buf[32];
-	float temp = LSM303AGR_get_temp();
-	int temp_i = temp * 10;
-	sprintf(buf, "LSM303AGR Temp: %4d\r\n", temp_i);
+	char buf[128];
+	int temp_i = lsm303agr.temp * 10;
+	int axi, ayi, azi, mxi, myi, mzi;
+	axi = lsm303agr.acc.x*1000; ayi = lsm303agr.acc.y * 1000; azi = lsm303agr.acc.z * 1000;
+	mxi = lsm303agr.mag.x*1000; myi = lsm303agr.mag.y * 1000; mzi = lsm303agr.mag.z * 1000;
+	sprintf(buf, "LSM303AGR Temp: %4d [0.1 degC] acc xyz %5d %5d %5d [mG] mag xyz %4d %4d %4d [mGauss]\r\n", temp_i, axi, ayi, azi, mxi, myi, mzi);
 	shell_tx_str(buf);
 }
 
@@ -516,10 +518,10 @@ uint8_t read_mag_reg(uint8_t addr, uint8_t reg)
 {
 	uint8_t rv;
 	HAL_StatusTypeDef hrv;
-	hrv = HAL_I2C_Master_Transmit(&hi2c1, addr, &reg, 1, 100);
+	hrv = HAL_I2C_Master_Transmit(&hi2c1, addr, &reg, 1, I2C_TIMEOUT);
 	if (hrv == HAL_OK)
 	{
-		hrv = HAL_I2C_Master_Receive(&hi2c1, addr, &rv, 1, 100);
+		hrv = HAL_I2C_Master_Receive(&hi2c1, addr, &rv, 1, I2C_TIMEOUT);
 		if (hrv == HAL_OK)
 			return rv;
 	}
