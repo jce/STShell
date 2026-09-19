@@ -188,10 +188,13 @@ CMD(version,	s_version, 	"Shows versions.") \
 CMD(test,		s_test, 	"Test arguments.") \
 CMD(clear,		s_clear, 	"Clear screen.") \
 CMD(live,		s_live,		"Live view of peripherhals.") \
-CMD(rd,			s_read,		"[begin [length]] Read memory location") \
+CMD(rd,			s_read,		"[begin [length]] Read memory location.") \
 CMD(stack,		s_stack,	"[paint, show] display stack max usage.") \
-CMD(mag,		s_mag,		"shows magnetometer readout") \
-CMD(lin,		s_lin,		"shows linear accelerometer readout")
+CMD(mag,		s_mag,		"shows magnetometer readout.") \
+CMD(lin,		s_lin,		"shows linear accelerometer readout.") \
+CMD(page,		s_page,		"[0-7F] Reads and prints flash page." ) \
+CMD(flashfill,	s_flashfill,"[0-7F 0-FFFFFFFF] Fills a flash page with a pattern." ) \
+CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." )
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -550,8 +553,88 @@ void s_lin(int argc, char **argv)
 	}
 }
 
+// Prints memory content per flash page. Probably writes in the future as well.
+void s_page(int argc, char **argv)
+{
+	const char errstr[] = "Please supply a page number as argument in the range [0-7F]\r\n";
+	if (argc <= 1)
+	{
+		shell_tx_str(errstr);
+		return;
+	}
+	int pagenr = s_atoi_hex(argv[1]);
+	if (pagenr < 0 || pagenr > 0x7F)
+	{
+		shell_tx_str(errstr);
+		return;
+	}
+	s_read_2(FLASH_BASE + pagenr * FLASH_PAGE_SIZE, FLASH_PAGE_SIZE);
+}
 
+// Fills a flash page with a given pattern.
+void s_flashfill(int argc, char **argv)
+{
+	const char errstr[] = "Usage: flashfill [pagenr 0-7F] [pattern 0-FFFFFFFF]\r\n";
+	if (argc < 3)
+	{
+		shell_tx_str(errstr);
+		return;
+	}
+	int pagenr = s_atoi_hex(argv[1]);
+	if (pagenr > 0x7F)
+	{
+		shell_tx_str(errstr);
+		return;
+	}
+	uint32_t pattern = s_atoi_hex(argv[2]);
+	uint32_t addr = FLASH_BASE + pagenr * FLASH_PAGE_SIZE;
 
+	HAL_FLASH_Unlock();
+	for (int i = 0; i < FLASH_PAGE_SIZE / 4; i++)
+	{
+		if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, pattern))
+		{
+			shell_tx_str("Programming failed\r\n");
+			break;
+		}
+		addr += 4;
+	}
+	HAL_FLASH_Lock();
+}
+
+// Fills a flash page with a given pattern.
+void s_flasherase(int argc, char **argv)
+{
+	const char errstr[] = "Usage: flasherase [pagenr 0-7F]\r\n";
+	if (argc < 2)
+	{
+		shell_tx_str(errstr);
+		return;
+	}
+	int pagenr = s_atoi_hex(argv[1]);
+	if (pagenr > 0x7F)
+	{
+		shell_tx_str(errstr);
+		return;
+	}
+
+	FLASH_EraseInitTypeDef ei =
+	{
+			.TypeErase = FLASH_TYPEERASE_PAGES,
+			.PageAddress = FLASH_BASE + pagenr * FLASH_PAGE_SIZE,
+			.NbPages = 1,
+	};
+	uint32_t pageerr = 0;
+
+	HAL_FLASH_Unlock();
+	if (HAL_OK != HAL_FLASHEx_Erase(&ei, &pageerr))
+	{
+		char buf[32];
+		sprintf(buf, "Erase failed: %ln\r\n", &pageerr);
+		shell_tx_str(buf);
+	}
+	HAL_FLASH_Lock();
+}
 
 
 
