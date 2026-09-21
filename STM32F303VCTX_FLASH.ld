@@ -172,6 +172,14 @@ SECTIONS
     _eccmram = .;       /* create a global symbol at ccmram end */
   } >CCMRAM AT> FLASH
 
+  /* CRC slot: laatste plek in FLASH, wordt runtime door de app zelf geschreven. */
+  .firstbootflag :
+  {
+    . = ALIGN(2);
+    KEEP(*(.firstbootflag))
+    . = ALIGN(2);
+  } > FLASH
+
   /* Uninitialized data section into "RAM" Ram type memory */
   . = ALIGN(4);
   .bss :

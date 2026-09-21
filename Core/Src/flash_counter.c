@@ -9,13 +9,13 @@
 
 #include <string.h>
 
-// Counter struct
+// Counter struct.
 typedef struct s_channel_counter
 {
 	uint16_t cnt;
 	uint16_t tally[TALLY_HWORD_LEN];
 } channel_counter;
-
+// Lives in its own flash page.
 channel_counter const *cnt_page = (channel_counter const *) CNT_LOC;
 
 // Counts tallies per page number
@@ -63,10 +63,10 @@ void fc_count_page_erase(uint8_t pagenr)
 {
 	if (cnt_page[pagenr].tally[TALLY_HWORD_LEN-1] != 0xFFFF) // Is the last tally set for this pagenr?
 		count_consolidate();
-	uint32_t tally = cnt_tally(pagenr);			// The bit that needs to be tallied ( 1->0)
-	const uint16_t* flash_addr = &cnt_page[pagenr].tally[tally];
+	uint32_t tally = cnt_tally(pagenr);
 	if (tally < TALLY_HWORD_LEN)
 	{
+		const uint16_t* flash_addr = &cnt_page[pagenr].tally[tally];
 		HAL_FLASH_Unlock();
 		if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, (uint32_t) flash_addr, 0x0000 ))
 		{
@@ -84,6 +84,23 @@ uint16_t get_page_counter(uint32_t pagenr)
 	return rv;
 }
 
+// Test for first boot after firmware update, and optionally increase flash counters
+// for the flash used pages.
+const uint16_t firstboot_flag __attribute__((section(".firstbootflag"), used)) = 0xFFFF;
+void count_firmware_downloads(void)
+{
+	const uint16_t* p = &firstboot_flag;
 
+	//if (firstboot_flag == 0xFFFF)	// This does not work, constant folding.
+	if (*p == 0xFFFF)
+	{
+		HAL_FLASH_Unlock();
+		HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, (uint32_t) p, 0x0000 );
+		HAL_FLASH_Lock();
+		uint32_t last_page = ((uint32_t) &firstboot_flag - FLASH_BASE) / PAGE_SIZE;
+		for (uint32_t page = 0; page <= last_page; page++)
+			fc_count_page_erase(page);
+	}
+}
 
 

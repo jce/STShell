@@ -19,5 +19,6 @@ extern uint8_t _counter_start;
 
 void fc_count_page_erase(uint8_t pagenr);
 uint16_t get_page_counter(uint32_t pagenr);
+void count_firmware_downloads(void);
 
 #endif /* INC_FLASH_COUNTER_H_ */

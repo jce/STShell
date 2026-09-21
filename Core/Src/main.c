@@ -19,7 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
-
+#include "flash_counter.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "shell.h"
@@ -133,6 +133,7 @@ int main(void)
 
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc1buf, 16);
   HAL_TIM_Base_Start_IT(&htim7);
+  count_firmware_downloads();
 
   while (1)
   {
