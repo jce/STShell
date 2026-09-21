@@ -194,7 +194,8 @@ CMD(mag,		s_mag,		"shows magnetometer readout.") \
 CMD(lin,		s_lin,		"shows linear accelerometer readout.") \
 CMD(page,		s_page,		"[0-7F] Reads and prints flash page." ) \
 CMD(flashfill,	s_flashfill,"[0-7F 0-FFFFFFFF] Fills a flash page with a pattern." ) \
-CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." )
+CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." ) \
+CMD(printf,		s_printf, 	"write something to printf" )
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -636,7 +637,16 @@ void s_flasherase(int argc, char **argv)
 	HAL_FLASH_Lock();
 }
 
-
+void s_printf(int argc, char **argv)
+{
+	for (int i = 1; i < argc; i++)
+	{
+		if (i > 1)
+			printf(" ");
+		printf(argv[i]);
+	}
+	shell_tx_str("\r\n");
+}
 
 
 

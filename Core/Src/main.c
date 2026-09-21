@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -52,8 +53,6 @@ TIM_HandleTypeDef htim7;
 
 UART_HandleTypeDef huart1;
 
-PCD_HandleTypeDef hpcd_USB_FS;
-
 /* USER CODE BEGIN PV */
 
 void UART1_TX(uint8_t c)
@@ -69,7 +68,6 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
-static void MX_USB_PCD_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM7_Init(void);
@@ -116,10 +114,10 @@ int main(void)
   MX_DMA_Init();
   MX_I2C1_Init();
   MX_SPI1_Init();
-  MX_USB_PCD_Init();
   MX_ADC1_Init();
   MX_USART1_UART_Init();
   MX_TIM7_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
   shell_register_tx(UART1_TX);
@@ -567,37 +565,6 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
-  * @brief USB Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USB_PCD_Init(void)
-{
-
-  /* USER CODE BEGIN USB_Init 0 */
-
-  /* USER CODE END USB_Init 0 */
-
-  /* USER CODE BEGIN USB_Init 1 */
-
-  /* USER CODE END USB_Init 1 */
-  hpcd_USB_FS.Instance = USB;
-  hpcd_USB_FS.Init.dev_endpoints = 8;
-  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-  hpcd_USB_FS.Init.phy_itface = PCD_PHY_EMBEDDED;
-  hpcd_USB_FS.Init.low_power_enable = DISABLE;
-  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USB_Init 2 */
-
-  /* USER CODE END USB_Init 2 */
-
-}
-
-/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -735,6 +702,19 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
         // chain broken: reset state machine, count the error, wait for next timer tick
     }
 }
+
+int __io_putchar(int ch)
+{
+    uint8_t c = (uint8_t)ch;
+    if (ch == '\n')              /* nette CRLF voor de terminal */
+    {
+        uint8_t r = '\r';
+        HAL_UART_Transmit(&huart1, &r, 1, 100);
+    }
+    HAL_UART_Transmit(&huart1, &c, 1, 100);
+    return ch;
+}
+
 
 /* USER CODE END 4 */
 
