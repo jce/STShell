@@ -31,7 +31,7 @@
 #include "usbd_msc.h"
 
 /* USER CODE BEGIN INCLUDE */
-
+HAL_StatusTypeDef flash_erase_page(uint32_t addr);
 /* USER CODE END INCLUDE */
 
 /** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY

@@ -47,8 +47,9 @@ MEMORY
 {
   CCMRAM    (xrw)    : ORIGIN = 0x10000000,   LENGTH = 8K
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 40K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 128K
-  STORAGE	(r)		: ORIGIN = 0x8020000,	LENGTH = 128K
+  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 126K
+  STORAGE	(r)		: ORIGIN = 0x801F800,	LENGTH = 128K
+  COUNTER	(r)		: ORIGIN = 0x803F800,	LENGTH = 2K
 }
 
 /* Sections */
@@ -214,6 +215,13 @@ SECTIONS
 	_storage_end = .;
   } > STORAGE    
 
+  .storage (NOLOAD) :
+  {
+    . = ALIGN(2048);
+	_counter_start = .;
+	. = . + 2K;
+	_counter_end = .;
+  } > COUNTER    
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
 }

@@ -3,6 +3,7 @@
 #include "stm32f3xx_hal.h"	// Fixes uint8_t being unknown.
 #include <string.h>	// strlen, strcmp
 
+#include "flash_counter.h"
 #include "LSM303AGR.h"
 #include "main.h"
 #include "shell.h"
@@ -184,6 +185,7 @@ void shell_rx(uint8_t c)
 // Xmacro for commands. Members: command, function, helptext
 #define COMMANDS \
 CMD(help, 		s_help, 	"Shows help.") \
+CMD(?,			s_help,		"Help alias.") \
 CMD(version,	s_version, 	"Shows versions.") \
 CMD(test,		s_test, 	"Test arguments.") \
 CMD(clear,		s_clear, 	"Clear screen.") \
@@ -195,7 +197,8 @@ CMD(lin,		s_lin,		"shows linear accelerometer readout.") \
 CMD(page,		s_page,		"[0-7F] Reads and prints flash page." ) \
 CMD(flashfill,	s_flashfill,"[0-7F 0-FFFFFFFF] Fills a flash page with a pattern." ) \
 CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." ) \
-CMD(printf,		s_printf, 	"write something to printf" )
+CMD(printf,		s_printf, 	"write something to printf." ) \
+CMD(wear,		s_wear,		"readout wear counters.")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -635,6 +638,7 @@ void s_flasherase(int argc, char **argv)
 		shell_tx_str(buf);
 	}
 	HAL_FLASH_Lock();
+	fc_count_page_erase(pagenr);
 }
 
 void s_printf(int argc, char **argv)
@@ -648,6 +652,16 @@ void s_printf(int argc, char **argv)
 	shell_tx_str("\r\n");
 }
 
+void s_wear(int argc, char **argv)
+{
+	char buf[32];
+	shell_tx_str("Flash page erase counters.\r\nPage Counter\r\n");
+	for (int i = 0; i < PAGE_NUM; i++)
+	{
+		sprintf(buf, "%4x %5d\r\n", i, get_page_counter(i));
+		shell_tx_str(buf);
+	}
+}
 
 
 

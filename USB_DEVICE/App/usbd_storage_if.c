@@ -23,6 +23,8 @@
 
 /* USER CODE BEGIN INCLUDE */
 
+#include "flash_counter.h"
+
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,16 +64,19 @@
   * @{
   */
 
+#define STORAGE_LUN_NBR                  1
+#define STORAGE_BLK_NBR                  0x10000
+#define STORAGE_BLK_SIZ                  0x200
+
 /* USER CODE BEGIN PRIVATE_DEFINES */
 
 extern uint8_t _storage_start;
 extern uint8_t _storage_end;
 #define STORAGE_LUN_NBR                  1
 #define STORAGE_BLK_SIZ                  0x200
+#undef STORAGE_BLK_NBR
 #define STORAGE_BLK_NBR                  ( ((uint32_t)&_storage_end - (uint32_t)&_storage_start) / STORAGE_BLK_SIZ )
 #define STORAGE_BASE					 ((uint32_t)&_storage_start)
-
-static HAL_StatusTypeDef flash_erase_page(uint32_t addr);
 
 /* USER CODE END PRIVATE_DEFINES */
 
@@ -250,23 +255,21 @@ int8_t STORAGE_Read_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t bl
 int8_t STORAGE_Write_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t blk_len)
 {
   /* USER CODE BEGIN 7 */
-	HAL_FLASH_Unlock();
-//	//for (int b = 0; b< blk_len; b++)
-//	//{
-		int pagenr = (STORAGE_BASE - 0x8000000) / 2048 + blk_addr / 4;
-		uint8_t* page_start = (uint8_t*) (0x8000000 + pagenr*2048);
-		static uint8_t page[2048];
-		memcpy(page, page_start, 2048);
-		memcpy(page + 512*(blk_addr % 4), buf, STORAGE_BLK_SIZ);
-//
-		flash_erase_page((uint32_t) page_start);
 
-		for (int i = 0; i < 512; i++)
-		{
-			HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t) page_start + 4 * i, *(uint32_t*) (page + 4*i) );
-		}
-	//}
+	HAL_FLASH_Unlock();
+	int pagenr = (STORAGE_BASE - 0x8000000) / 2048 + blk_addr / 4;
+	uint8_t* page_start = (uint8_t*) (0x8000000 + pagenr*2048);
+	static uint8_t page[2048];
+	memcpy(page, page_start, 2048);
+	memcpy(page + 512*(blk_addr % 4), buf, STORAGE_BLK_SIZ);
+	flash_erase_page((uint32_t) page_start);
+	for (int i = 0; i < 512; i++)
+	{
+		HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t) page_start + 4 * i, *(uint32_t*) (page + 4*i) );
+	}
 	HAL_FLASH_Lock();
+
+	fc_count_page_erase(pagenr);
 
 
   return (USBD_OK);
@@ -287,7 +290,7 @@ int8_t STORAGE_GetMaxLun_FS(void)
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
 
-static HAL_StatusTypeDef flash_erase_page(uint32_t addr)
+HAL_StatusTypeDef flash_erase_page(uint32_t addr)
 {
   FLASH_EraseInitTypeDef erase;
   uint32_t err = 0;
