@@ -56,7 +56,3 @@ Built with STM32CubeIDE and STM32CubeMX (`blink_led_2.ioc`). Import the project 
 
 - Write-back cache with 100 ms flush to coalesce sector writes into page writes
 - Targeted wear leveling for the FAT zone, if wear data ever justifies it
-
-## License
-
-[MIT](LICENSE)
