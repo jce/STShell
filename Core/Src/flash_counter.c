@@ -30,11 +30,13 @@ uint32_t cnt_tally(uint32_t pagenr)
 	return rv;
 }
 
-void count_consolidate()
+// Consolidates all the tallies. And adds one to pagenum and the tally page.
+void count_consolidate(uint32_t pagenum)
 {
 	channel_counter cnt_page_local[PAGE_NUM];
 	memcpy(cnt_page_local, cnt_page, sizeof(cnt_page_local));
-	cnt_page_local[PAGE_NUM-1].cnt ++;
+	cnt_page_local[PAGE_NUM-1].cnt ++;				// Add one to the counter of the tally page
+	cnt_page_local[pagenum].cnt ++;					// Add one to the counter of the one parameter page
 	for (int c = 0; c < PAGE_NUM; c++)
 	{
 		cnt_page_local[c].cnt += cnt_tally(c);
@@ -61,17 +63,15 @@ void count_consolidate()
 
 void fc_count_page_erase(uint8_t pagenr)
 {
-	if (cnt_page[pagenr].tally[TALLY_HWORD_LEN-1] != 0xFFFF) // Is the last tally set for this pagenr?
-		count_consolidate();
 	uint32_t tally = cnt_tally(pagenr);
-	if (tally < TALLY_HWORD_LEN)
+	if (tally >= TALLY_HWORD_LEN)
+		count_consolidate(pagenr);
+	else
 	{
 		const uint16_t* flash_addr = &cnt_page[pagenr].tally[tally];
 		HAL_FLASH_Unlock();
 		if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, (uint32_t) flash_addr, 0x0000 ))
-		{
 			printf("Error programming flash.\r\n");
-		}
 		HAL_FLASH_Lock();
 	}
 }
