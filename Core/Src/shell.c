@@ -10,6 +10,7 @@
 #include "shell_util.h"
 #include "FreeRTOS.h"
 #include "queue.h"
+#include "task.h"
 //======================================================================
 // Line editor logic
 
@@ -209,7 +210,9 @@ CMD(page,		s_page,		"[0-7F] Reads and prints flash page." ) \
 CMD(flashfill,	s_flashfill,"[0-7F 0-FFFFFFFF] Fills a flash page with a pattern." ) \
 CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." ) \
 CMD(printf,		s_printf, 	"write something to printf." ) \
-CMD(wear,		s_wear,		"readout wear counters.")
+CMD(wear,		s_wear,		"readout wear counters.") \
+CMD(mem,		s_mem,		"Gets free heap size of FreeRTOS.") \
+CMD(ps,			s_ps,		"Gets the current tasks list.")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -668,8 +671,50 @@ void s_wear(int argc, char **argv)
 	}
 }
 
+void s_mem(int argc, char **argv)
+{
+	char buf[32];
+	sprintf(buf, "Free heap size: %d\r\n", xPortGetFreeHeapSize());
+	shell_tx_str(buf);
+	sprintf(buf, "Minimum free heap size: %d\r\n", xPortGetMinimumEverFreeHeapSize());
+	shell_tx_str(buf);
+}
 
+static const char *task_state_name(eTaskState s)
+{
+    switch (s)
+    {
+        case eRunning:    return "Running  ";
+        case eReady:      return "Ready    ";
+        case eBlocked:    return "Blocked  ";
+        case eSuspended:  return "Suspended";
+        case eDeleted:    return "Deleted  ";
+        case eInvalid:    return "Invalid  ";
+        default:          return "?        ";
+    }
+}
 
+void s_ps(int argc, char **argv)
+{
+	char buf[128];
+
+	TaskStatus_t stats[10];
+	uint32_t total_runtime;
+	UBaseType_t n = uxTaskGetSystemState(stats, 10, &total_runtime);
+	sprintf(buf, "Runtime: %lu\r\n", total_runtime);
+	shell_tx_str(buf);
+	shell_tx_str("Name         State     Pri Minstack    Runtime\r\n");
+	for (UBaseType_t i = 0; i < n; i++)
+	{
+		sprintf(buf, "%-12s %s %3lu %8u %10lu\r\n",
+                stats[i].pcTaskName,
+				task_state_name(stats[i].eCurrentState),   // hmm, zie hieronder
+                stats[i].uxCurrentPriority,
+                stats[i].usStackHighWaterMark,
+				stats[i].ulRunTimeCounter);
+		shell_tx_str(buf);
+	}
+}
 
 
 

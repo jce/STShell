@@ -278,7 +278,7 @@ void USART1_IRQHandler(void)
         if (xQueueReceiveFromISR(STShell_TXHandle, &c, &woken) == pdTRUE)
             USART1->TDR = c;
         else
-            USART1->CR1 &= ~USART_CR1_TXEIE;   // leeg → uit
+            USART1->CR1 &= ~USART_CR1_TXEIE;   // Empty -> stop interrupt.
         portYIELD_FROM_ISR(woken);
     }
   /* USER CODE END USART1_IRQn 0 */
