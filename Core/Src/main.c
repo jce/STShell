@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 #include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -25,6 +26,7 @@
 #include "shell.h"
 #include "LSM303AGR.h"
 #include "flash_counter.h"
+#include "queue.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,6 +56,30 @@ TIM_HandleTypeDef htim7;
 
 UART_HandleTypeDef huart1;
 
+/* Definitions for defaultTask */
+osThreadId_t defaultTaskHandle;
+const osThreadAttr_t defaultTask_attributes = {
+  .name = "defaultTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for STShell */
+osThreadId_t STShellHandle;
+const osThreadAttr_t STShell_attributes = {
+  .name = "STShell",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for STShell_RX */
+osMessageQueueId_t STShell_RXHandle;
+const osMessageQueueAttr_t STShell_RX_attributes = {
+  .name = "STShell_RX"
+};
+/* Definitions for STShell_TX */
+osMessageQueueId_t STShell_TXHandle;
+const osMessageQueueAttr_t STShell_TX_attributes = {
+  .name = "STShell_TX"
+};
 /* USER CODE BEGIN PV */
 
 void UART1_TX(uint8_t c)
@@ -72,6 +98,9 @@ static void MX_SPI1_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM7_Init(void);
+void StartDefaultTask(void *argument);
+void StartSTShell(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -118,19 +147,63 @@ int main(void)
   MX_ADC1_Init();
   MX_USART1_UART_Init();
   MX_TIM7_Init();
-  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
-  shell_register_tx(UART1_TX);
   stack_paint();
   init_LSM303AGR();
 
-  HAL_UART_RxCpltCallback(&huart1);			// Arm the interrupt chain once.
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc1buf, 16);
   HAL_TIM_Base_Start_IT(&htim7);
   count_firmware_downloads();
 
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* Create the queue(s) */
+  /* creation of STShell_RX */
+  STShell_RXHandle = osMessageQueueNew (16, sizeof(uint8_t), &STShell_RX_attributes);
+
+  /* creation of STShell_TX */
+  STShell_TXHandle = osMessageQueueNew (16, sizeof(uint8_t), &STShell_TX_attributes);
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of defaultTask */
+  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* creation of STShell */
+  STShellHandle = osThreadNew(StartSTShell, NULL, &STShell_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -577,7 +650,7 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
@@ -661,7 +734,18 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *h)
 	static uint8_t pData;
 	rv = HAL_UART_Receive_IT(&huart1, &pData, 1);
 	if (HAL_OK == rv)
-		shell_rx(pData);
+	{
+		BaseType_t pxHigherPriorityTaskWoken = pdFALSE;
+		xQueueSendFromISR(STShell_RXHandle, &pData, &pxHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
+	}
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *h)
+{
+    if (h != &huart1) return;
+    static uint8_t pData;
+    HAL_UART_Receive_IT(&huart1, &pData, 1);
 }
 
 // Vul stack met pattern (bij opstarten)
@@ -719,6 +803,46 @@ int __io_putchar(int ch)
 
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartDefaultTask */
+/**
+  * @brief  Function implementing the defaultTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartDefaultTask */
+void StartDefaultTask(void *argument)
+{
+  /* init code for USB_DEVICE */
+  MX_USB_DEVICE_Init();
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartSTShell */
+/**
+* @brief Function implementing the STShell thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartSTShell */
+void StartSTShell(void *argument)
+{
+  /* USER CODE BEGIN StartSTShell */
+  /* Infinite loop */
+	HAL_UART_RxCpltCallback(&huart1);			// Arm the interrupt chain once.
+
+  for(;;)
+  {
+	  shell_task();
+  }
+  /* USER CODE END StartSTShell */
+}
 
 /**
   * @brief  Period elapsed callback in non blocking mode

@@ -8,13 +8,16 @@
 #include "main.h"
 #include "shell.h"
 #include "shell_util.h"
+#include "FreeRTOS.h"
+#include "queue.h"
 //======================================================================
 // Line editor logic
 
-void (*shell_tx)(char); // Transmit function for one character
-void shell_register_tx(void (*_shell_tx)(uint8_t))
+
+void shell_tx(char c)
 {
-	shell_tx = (void (*)(char)) _shell_tx;
+	xQueueSend(STShell_TXHandle, &c, portMAX_DELAY);	// Fills the TX queue.
+	USART1->CR1 |= USART_CR1_TXEIE;						// Starts the TX interrupt chain to transmit the TX queue.
 }
 
 char commandbuf[CBLEN+1] = {0};	// Command buffer
@@ -177,6 +180,14 @@ void shell_rx(uint8_t c)
 		memset(commandbuf, 0, sizeof(commandbuf));
 	move_line_right(c);
 	new_command = false;
+}
+
+void shell_task()
+{
+	char c;
+	while (1)
+		if (xQueueReceive(STShell_RXHandle, &c, portMAX_DELAY) == pdTRUE)
+			shell_rx(c);
 }
 
 //====================================================================
@@ -420,25 +431,19 @@ void s_line_LSM303AGR()
 
 void s_live(int argc, char **argv)
 {
+	char c;
 	shell_tx_str("\x1b[?25l" "\033[2J"); // Cursur hide, home.
-	while ( ! (USART1->ISR & USART_ISR_RXNE))
+	while ( xQueueReceive(STShell_RXHandle, &c, 0) != pdTRUE )
 	{
 		s_live_gpioline();
 		s_live_temp_vbat_vref_line();
 		s_adc_line(&hadc1);
 		s_line_LSM303AGR();
-//		s_adc_line(&hadc2);
-//		s_adc_line(&hadc3);
-//		s_adc_line(&hadc4);
 
-		volatile uint32_t loop = 0;
-		while (loop < 500000)
-			loop++;
+		osDelay(250);
 	}
-	(void)USART1->RDR;
 	shell_tx_str("\x1b[?25h" "\033[0;0H" "\033[2J"); // Cursor aan, home, clearscreen.
 }
-
 
 void s_read_2(int addr, int length)
 {
