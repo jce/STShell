@@ -33,31 +33,34 @@ uint32_t cnt_tally(uint32_t pagenr)
 // Consolidates all the tallies. And adds one to pagenum and the tally page.
 void count_consolidate(uint32_t pagenum)
 {
-	channel_counter cnt_page_local[PAGE_NUM];
-	memcpy(cnt_page_local, cnt_page, sizeof(cnt_page_local));
-	cnt_page_local[PAGE_NUM-1].cnt ++;				// Add one to the counter of the tally page
-	cnt_page_local[pagenum].cnt ++;					// Add one to the counter of the one parameter page
-	for (int c = 0; c < PAGE_NUM; c++)
-	{
-		cnt_page_local[c].cnt += cnt_tally(c);
-		for (int t = 0; t < TALLY_HWORD_LEN; t++)
-			cnt_page_local[c].tally[t] = 0xFFFF;
-	}
+	uint16_t cnt_page_local[PAGE_NUM];
+	for (int i = 0; i < PAGE_NUM; i++)
+		cnt_page_local[i] = cnt_page[i].cnt + cnt_tally(i);
+	cnt_page_local[PAGE_NUM-1] ++;				// Add one to the counter of the tally page
+	cnt_page_local[pagenum] ++;					// Add one to the counter of the one parameter page
 	HAL_FLASH_Unlock();
 	if (HAL_OK != flash_erase_page(CNT_LOC))
 	{
-		printf("Error erasing flash page.\r\n");
+		printf("Error erasing flash page.\r\n");	// This erase is counted above, not here.
 		HAL_FLASH_Lock();
 		return;
 	}
-	_Static_assert(sizeof(channel_counter) * PAGE_NUM % 4 == 0, "must be word-sized for flash program");
-	for (int i = 0; i < sizeof(cnt_page_local)/4; i++)
-		if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t) cnt_page + 4*i, *(uint32_t*) ((uint8_t*) cnt_page_local + 4*i) ))
+	for (int i = 0; i < PAGE_NUM; i++)
+	{
+		if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, (uint32_t) cnt_page + 2 * (TALLY_HWORD_LEN + 1) * i  , cnt_page_local[i] ))
 		{
 			printf("Error programming flash.\r\n");
 			HAL_FLASH_Lock();
 			return;
 		}
+		for (int j = 0; j < TALLY_HWORD_LEN; j++)
+			if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, (uint32_t) cnt_page + 2 * ((TALLY_HWORD_LEN + 1) * i + 1 + j), 0xFFFF ))
+			{
+				printf("Error programming flash.\r\n");
+				HAL_FLASH_Lock();
+				return;
+			}
+	}
 	HAL_FLASH_Lock();
 }
 

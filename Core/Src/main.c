@@ -19,11 +19,12 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
-#include "flash_counter.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "shell.h"
 #include "LSM303AGR.h"
+#include "flash_counter.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -124,16 +125,16 @@ int main(void)
   stack_paint();
   init_LSM303AGR();
 
+  HAL_UART_RxCpltCallback(&huart1);			// Arm the interrupt chain once.
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc1buf, 16);
+  HAL_TIM_Base_Start_IT(&htim7);
+  count_firmware_downloads();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  HAL_UART_RxCpltCallback(&huart1);			// Arm the interrupt chain once.
 
-
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc1buf, 16);
-  HAL_TIM_Base_Start_IT(&htim7);
-  count_firmware_downloads();
 
   while (1)
   {
@@ -635,7 +636,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI0_IRQn, 1, 0);
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -677,14 +678,14 @@ void stack_paint(void)
 }
 
 // Voor I2C interaction with LSM303AGR
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    if (htim->Instance == TIM7)
-    {
-    	//HAL_GPIO_TogglePin(LD3_GPIO_Port, LD9_Pin);
-		LSM303AGR_10ms_int();
-    }
-}
+//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+//{
+//    if (htim->Instance == TIM7)
+//    {
+//    	//HAL_GPIO_TogglePin(LD3_GPIO_Port, LD9_Pin);
+//		LSM303AGR_10ms_int();
+//    }
+//}
 
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
@@ -718,6 +719,33 @@ int __io_putchar(int ch)
 
 
 /* USER CODE END 4 */
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM1 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM1)
+  {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+  if (htim->Instance == TIM7)
+  {
+    //HAL_GPIO_TogglePin(LD3_GPIO_Port, LD9_Pin);
+  	LSM303AGR_10ms_int();
+  }
+
+  /* USER CODE END Callback 1 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
