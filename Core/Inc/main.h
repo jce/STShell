@@ -44,6 +44,7 @@ extern ADC_HandleTypeDef hadc1;
 extern uint16_t adc1buf[16];
 extern I2C_HandleTypeDef hi2c1;
 extern osMessageQueueId_t STShell_RXHandle, STShell_TXHandle;
+extern SPI_HandleTypeDef hspi1;
 
 /* USER CODE END ET */
 

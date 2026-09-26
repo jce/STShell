@@ -27,6 +27,7 @@
 #include "LSM303AGR.h"
 #include "flash_counter.h"
 #include "queue.h"
+#include "I3G4250D.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -151,6 +152,7 @@ int main(void)
 
   stack_paint();
   init_LSM303AGR();
+  init_I3G4250D();
 
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc1buf, 16);
   HAL_TIM_Base_Start_IT(&htim7);
@@ -535,7 +537,7 @@ static void MX_SPI1_Init(void)
 {
 
   /* USER CODE BEGIN SPI1_Init 0 */
-
+	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_SET);
   /* USER CODE END SPI1_Init 0 */
 
   /* USER CODE BEGIN SPI1_Init 1 */
@@ -545,7 +547,7 @@ static void MX_SPI1_Init(void)
   hspi1.Instance = SPI1;
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_4BIT;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;

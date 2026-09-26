@@ -206,6 +206,7 @@ CMD(rd,			s_read,		"[begin [length]] Read memory location.") \
 CMD(stack,		s_stack,	"[paint, show] display stack max usage.") \
 CMD(mag,		s_mag,		"shows magnetometer readout.") \
 CMD(lin,		s_lin,		"shows linear accelerometer readout.") \
+CMD(gyro,		s_gyro,		"shows gyrometer readout.") \
 CMD(page,		s_page,		"[0-7F] Reads and prints flash page." ) \
 CMD(flashfill,	s_flashfill,"[0-7F 0-FFFFFFFF] Fills a flash page with a pattern." ) \
 CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." ) \
@@ -716,9 +717,21 @@ void s_ps(int argc, char **argv)
 	}
 }
 
-
-
-
+void s_gyro(int argc, char **argv)
+{
+	uint8_t data[0x40];
+	char buf[64];
+	data[0] = 0x00 | 0x80 | 0x40;		// Set read bit, set auto increment bit.
+	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_RESET);
+	HAL_SPI_Transmit(&hspi1, &data[0], 1, I2C_TIMEOUT);	// Borrow the I2C timeout for SPI
+	HAL_SPI_Receive(&hspi1, data, 0x40, I2C_TIMEOUT);
+	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_SET);
+	for (int i = 0; i < 0x40; i++)
+	{
+		sprintf(buf, "%3X %3X\r\n", i, data[i]);
+		shell_tx_str(buf);
+	}
+}
 
 
 
