@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "shell.h"
+#include "nvstore.h"
 #include "LSM303AGR.h"
 #include "flash_counter.h"
 #include "queue.h"
@@ -155,6 +156,14 @@ int main(void)
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc1buf, 16);
   HAL_TIM_Base_Start_IT(&htim7);
   count_firmware_downloads();
+
+	uint32_t* bootp = (uint32_t*) nvfind(NV_BOOTCOUNT);
+	uint32_t boot = 0;
+	if (bootp)
+		boot = *bootp;
+	boot++;
+	nvstore(NV_BOOTCOUNT, 4, &boot);
+
 
   /* USER CODE END 2 */
 
@@ -836,6 +845,13 @@ void StartSTShell(void *argument)
   /* USER CODE BEGIN StartSTShell */
   /* Infinite loop */
 	HAL_UART_RxCpltCallback(&huart1);			// Arm the interrupt chain once.
+
+	char* motd = (char*) nvfind(NV_MOTD);
+	if (motd)
+	{
+		shell_tx_str(motd);
+		shell_tx_str("\r\n");
+	}
 
   for(;;)
   {

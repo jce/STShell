@@ -6,6 +6,7 @@
 #include "flash_counter.h"
 #include "LSM303AGR.h"
 #include "main.h"
+#include "nvstore.h"
 #include "shell.h"
 #include "shell_util.h"
 #include "FreeRTOS.h"
@@ -212,7 +213,10 @@ CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." ) \
 CMD(printf,		s_printf, 	"write something to printf." ) \
 CMD(wear,		s_wear,		"readout wear counters.") \
 CMD(mem,		s_mem,		"Gets free heap size of FreeRTOS.") \
-CMD(ps,			s_ps,		"Gets the current tasks list.")
+CMD(ps,			s_ps,		"Gets the current tasks list.") \
+CMD(note,		s_note,		"[note text] Recalls or writes a note.") \
+CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
+CMD(bootcount,	s_bootcount,"Recalls the bootcount")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -716,9 +720,55 @@ void s_ps(int argc, char **argv)
 	}
 }
 
+#define GLUE_ARGC_TOGETHER \
+		for (char* i = argv[1]; i < argv[argc-1]; i++)	\
+			if (*i == 0)								\
+				*i = ' ';
+
+void s_nvstr(const char *name, nvstore_desc key, int argc, char **argv)
+{
+	if (argc == 1)
+	{
+		char* val = (char*) nvfind(key);
+		if (!val)
+			return;
+		shell_tx_str(val);
+		shell_tx_str("\r\n");
+		return;
+	}
+	if (argc >=3)
+		for (char* i = argv[1]; i < argv[argc-1]; i++)
+			if (*i == 0)
+				*i = ' ';
+	HAL_StatusTypeDef rv = nvstore(key, strlen(argv[1])+1, (void*) argv[1]);
+	if (rv == HAL_OK)
+	{
+		shell_tx_str(name);
+		shell_tx_str(" saved\r\n");
+	}
+	else
+	{
+		shell_tx_str("Failed to save ");
+		shell_tx_str(name);
+		shell_tx_str("\r\n");
+	}
+}
 
 
+void s_note(int argc, char **argv)  {s_nvstr("Note", NV_NOTE, argc, argv);}
+void s_motd(int argc, char **argv)	{s_nvstr("MOTD", NV_MOTD, argc, argv);}
 
+void s_bootcount(int argc, char **argv)
+{
+	uint32_t* bootp = (uint32_t*) nvfind(NV_BOOTCOUNT);
+	uint32_t boot = 0;
+	if (bootp)
+		boot = *bootp;
+
+	char buf[32];
+	sprintf(buf, "Bootcount: %ld\r\n", boot);
+	shell_tx_str(buf);
+}
 
 
 
