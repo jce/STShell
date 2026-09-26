@@ -10,6 +10,7 @@
 
 #include <string.h>
 
+#include "flash_counter.h"
 #include "nvstore.h"
 #include "usbd_storage_if.h"
 
@@ -152,6 +153,7 @@ HAL_StatusTypeDef nvconsolidate(nvstore_desc desc, uint8_t size, void *p)
 		HAL_FLASH_Lock();
 		return HAL_ERROR;
 	}
+	fc_count_page_erase((NV_START - FLASH_BASE) / PAGE_SIZE);
 
 	for (int i = 0; i < NV_LEN / 8; i++)
 		if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, (uint32_t) NV_START + 8 * i  , * (uint64_t*) &buf[8*i] ))

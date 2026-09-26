@@ -738,8 +738,8 @@ void s_nvstr(const char *name, nvstore_desc key, int argc, char **argv)
 	}
 	if (argc >=3)
 		for (char* i = argv[1]; i < argv[argc-1]; i++)
-			if (*i == 0)
-				*i = ' ';
+			if (*i == 0)			// Lijmt alle argumenten aan elkaar
+				*i = ' ';			// Gaat ervan uit dat ze na elkaar liggen in het geheugen.
 	HAL_StatusTypeDef rv = nvstore(key, strlen(argv[1])+1, (void*) argv[1]);
 	if (rv == HAL_OK)
 	{
