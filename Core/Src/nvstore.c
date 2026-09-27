@@ -113,9 +113,6 @@ HAL_StatusTypeDef nvconsolidate(nvstore_desc desc, uint8_t size, void *p)
 {
 	// Using a static buffer for consolidation means risk of race conditions.
 	static uint8_t buf[FLASH_PAGE_SIZE] __attribute__((aligned(8)));// FLASH_PAGE_SIZE IS NV_LEN, but NV_LEN is not constant...
-	if (NV_LEN != FLASH_PAGE_SIZE)						// Test whether FLASH_PAGE_SIZE is indeed NV_LEN.
-		while(1) {}
-	memcpy(buf, (uint8_t*) NV_START, NV_LEN);
 	uint32_t remaining = NV_LEN;
 	uint32_t len;
 	void *src;
@@ -153,7 +150,6 @@ HAL_StatusTypeDef nvconsolidate(nvstore_desc desc, uint8_t size, void *p)
 		HAL_FLASH_Lock();
 		return HAL_ERROR;
 	}
-	fc_count_page_erase((NV_START - FLASH_BASE) / PAGE_SIZE);
 
 	for (int i = 0; i < NV_LEN / 8; i++)
 		if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, (uint32_t) NV_START + 8 * i  , * (uint64_t*) &buf[8*i] ))
@@ -164,6 +160,8 @@ HAL_StatusTypeDef nvconsolidate(nvstore_desc desc, uint8_t size, void *p)
 		}
 
 	HAL_FLASH_Lock();
+
+	fc_count_page_erase((NV_START - FLASH_BASE) / PAGE_SIZE);
 
 	return HAL_OK;
 }
