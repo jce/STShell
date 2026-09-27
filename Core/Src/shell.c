@@ -216,7 +216,8 @@ CMD(mem,		s_mem,		"Gets free heap size of FreeRTOS.") \
 CMD(ps,			s_ps,		"Gets the current tasks list.") \
 CMD(note,		s_note,		"[note text] Recalls or writes a note.") \
 CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
-CMD(bootcount,	s_bootcount,"Recalls the bootcount")
+CMD(bootcount,	s_bootcount,"Recalls the bootcount") \
+CMD(time,		s_time,		"Recalls or sets time [YYYY MM DD hh mm ss]")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -770,6 +771,40 @@ void s_bootcount(int argc, char **argv)
 	shell_tx_str(buf);
 }
 
+void s_time(int argc, char **argv)
+{
+	RTC_TimeTypeDef t;
+	RTC_DateTypeDef d;
+	uint32_t Year;
+	if (argc == 1)
+	{
+		HAL_RTC_GetTime(&hrtc, &t, RTC_FORMAT_BIN);
+		HAL_RTC_GetDate(&hrtc, &d, RTC_FORMAT_BIN);
+
+		char buf[64];
+		sprintf(buf, "%04u-%02u-%02u %02u:%02u:%02u\r\n",
+				d.Year + 2000, d.Month, d.Date,
+				t.Hours, t.Minutes, t.Seconds);
+		shell_tx_str(buf);
+	}
+	else if (argc == 7 &&
+			sscanf(argv[1], "%lu", &Year) == 1 &&
+			sscanf(argv[2], "%hhu", &d.Month) == 1 &&
+			sscanf(argv[3], "%hhu", &d.Date) == 1 &&
+			sscanf(argv[4], "%hhu", &t.Hours) == 1 &&
+			sscanf(argv[5], "%hhu", &t.Minutes) == 1 &&
+			sscanf(argv[6], "%hhu", &t.Seconds) == 1)
+	{
+		d.Year = Year - 2000;
+		if (HAL_OK == HAL_RTC_SetTime(&hrtc, &t, RTC_FORMAT_BIN) &&
+			HAL_OK == HAL_RTC_SetDate(&hrtc, &d, RTC_FORMAT_BIN))
+			shell_tx_str("OK\r\n");
+		else
+			shell_tx_str("Error setting RTC.\r\n");
+	}
+	else
+		shell_tx_str("Usage: no arguments to get date/time. [YYYY MM DD hh mm ss] to set time.\r\n");
+}
 
 
 
