@@ -878,6 +878,24 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
     }
 }
 
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == SPI1)
+    	I3G4250D_SPI1_Callback();
+}
+
+void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == SPI1)
+    	I3G4250D_SPI1_Callback();
+}
+
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == SPI1)
+    	I3G4250D_SPI1_Failed();
+}
+
 int __io_putchar(int ch)
 {
     uint8_t c = (uint8_t)ch;
@@ -960,8 +978,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM7)
   {
-    //HAL_GPIO_TogglePin(LD3_GPIO_Port, LD9_Pin);
-  	LSM303AGR_10ms_int();
+  	LSM303AGR_10ms_int();		// This is an interrupt cascade.
+  	I3G4250D_10ms_int();		// This too. Barfight!
   }
 
   /* USER CODE END Callback 1 */

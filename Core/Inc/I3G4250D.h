@@ -10,7 +10,7 @@
 
 #include "main.h"
 
-#define SPI_TIMEOUT			100
+#define SPI1_TIMEOUT		100
 
 #define WHO_AM_I			0x0F
 #define CTRL_REG1			0x20
@@ -39,10 +39,16 @@
 #define INT1_THS_ZL			0x37
 #define INT1_DURATION		0x38
 
+#define WHO_AM_I_VALUE		0b11010011
+
+#define SPI1_CS_LOW()	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_RESET)
+#define SPI1_CS_HIGH()	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_SET)
+
 HAL_StatusTypeDef init_I3G4250D(void);
-//void LSM303AGR_10ms_int(void);
-//void LSM303AGR_I2C_Callback(void);
-//void LSM303AGR_I2C_Err_Callback(void);
+void I3G4250D_10ms_int(void);
+void I3G4250D_SPI1_Callback(void);
+void I3G4250D_SPI1_Failed(void);
+
 
 struct S_I3G4250D {				// Let op, structure is niet atomic geschreven.
 		float temp;					// Temperature in [degC]

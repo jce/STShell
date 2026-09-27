@@ -5,6 +5,7 @@
 
 #include "flash_counter.h"
 #include "LSM303AGR.h"
+#include "I3G4250D.h"
 #include "main.h"
 #include "nvstore.h"
 #include "shell.h"
@@ -204,21 +205,21 @@ CMD(test,		s_test, 	"Test arguments.") \
 CMD(clear,		s_clear, 	"Clear screen.") \
 CMD(live,		s_live,		"Live view of peripherhals.") \
 CMD(rd,			s_read,		"[begin [length]] Read memory location.") \
-CMD(stack,		s_stack,	"[paint, show] display stack max usage.") \
-CMD(mag,		s_mag,		"shows magnetometer readout.") \
-CMD(lin,		s_lin,		"shows linear accelerometer readout.") \
-CMD(gyro,		s_gyro,		"shows gyrometer readout.") \
+CMD(stack,		s_stack,	"[paint, show] Display stack max usage.") \
+CMD(mag,		s_mag,		"Shows magnetometer readout.") \
+CMD(lin,		s_lin,		"Shows linear accelerometer readout.") \
+CMD(gyro,		s_gyro,		"Shows gyrometer readout.") \
 CMD(page,		s_page,		"[0-7F] Reads and prints flash page." ) \
 CMD(flashfill,	s_flashfill,"[0-7F 0-FFFFFFFF] Fills a flash page with a pattern." ) \
 CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." ) \
-CMD(printf,		s_printf, 	"write something to printf." ) \
-CMD(wear,		s_wear,		"readout wear counters.") \
+CMD(printf,		s_printf, 	"Write something to printf." ) \
+CMD(wear,		s_wear,		"Readout wear counters.") \
 CMD(mem,		s_mem,		"Gets free heap size of FreeRTOS.") \
 CMD(ps,			s_ps,		"Gets the current tasks list.") \
 CMD(note,		s_note,		"[note text] Recalls or writes a note.") \
 CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
-CMD(bootcount,	s_bootcount,"Recalls the bootcount") \
-CMD(time,		s_time,		"Recalls or sets time [YYYY MM DD hh mm ss]")
+CMD(bootcount,	s_bootcount,"Recalls the bootcount.") \
+CMD(time,		s_time,		"Recalls or sets time [YYYY MM DD hh mm ss].")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -438,6 +439,28 @@ void s_line_LSM303AGR()
 	shell_tx_str(buf);
 }
 
+void s_line_I3G4250D(void)
+{
+	char buf[128];
+	int temp, x, y, z;
+	temp = i3g4250d.temp; x = i3g4250d.x; y = i3g4250d.y; z = i3g4250d.z;
+	sprintf(buf, "I3G4250D Temp: %3d [?] gyro xyz %5d %5d %5d [?]\r\n", temp, x, y, z);
+	shell_tx_str(buf);
+}
+
+void s_line_time(void)
+{
+	RTC_TimeTypeDef t;
+	RTC_DateTypeDef d;
+	HAL_RTC_GetTime(&hrtc, &t, RTC_FORMAT_BIN);
+	HAL_RTC_GetDate(&hrtc, &d, RTC_FORMAT_BIN);
+	char buf[64];
+	sprintf(buf, "%04u-%02u-%02u %02u:%02u:%02u\r\n",
+			d.Year + 2000, d.Month, d.Date,
+			t.Hours, t.Minutes, t.Seconds);
+	shell_tx_str(buf);
+}
+
 void s_live(int argc, char **argv)
 {
 	char c;
@@ -448,6 +471,8 @@ void s_live(int argc, char **argv)
 		s_live_temp_vbat_vref_line();
 		s_adc_line(&hadc1);
 		s_line_LSM303AGR();
+		s_line_I3G4250D();
+		s_line_time();
 
 		osDelay(250);
 	}
@@ -727,10 +752,10 @@ void s_gyro(int argc, char **argv)
 	uint8_t data[0x40];
 	char buf[64];
 	data[0] = 0x00 | 0x80 | 0x40;		// Set read bit, set auto increment bit.
-	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_RESET);
-	HAL_SPI_Transmit(&hspi1, &data[0], 1, I2C_TIMEOUT);	// Borrow the I2C timeout for SPI
-	HAL_SPI_Receive(&hspi1, data, 0x40, I2C_TIMEOUT);
-	HAL_GPIO_WritePin(GPIOE, GPIO_PIN_3, GPIO_PIN_SET);
+	SPI1_CS_LOW();
+	HAL_SPI_Transmit(&hspi1, &data[0], 1, SPI1_TIMEOUT);
+	HAL_SPI_Receive(&hspi1, data, 0x40, SPI1_TIMEOUT);
+	SPI1_CS_HIGH();
 	for (int i = 0; i < 0x40; i++)
 	{
 		sprintf(buf, "%3X %3X\r\n", i, data[i]);
@@ -766,7 +791,6 @@ void s_nvstr(const char *name, nvstore_desc key, int argc, char **argv)
 		shell_tx_str("\r\n");
 	}
 }
-
 
 void s_note(int argc, char **argv)  {s_nvstr("Note", NV_NOTE, argc, argv);}
 void s_motd(int argc, char **argv)	{s_nvstr("MOTD", NV_MOTD, argc, argv);}
