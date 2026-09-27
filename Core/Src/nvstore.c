@@ -36,7 +36,9 @@ typedef union header{
 // Store a bit of information in NV
 HAL_StatusTypeDef nvstore(nvstore_desc desc, uint8_t size, void *p)
 {
-	size = (size+1) & 0xFFFFFFFE;		// Size needs to be a multiple of halfwords
+	if (size > 254)						// Rounding 255 upwards would turn into 0.
+		return HAL_ERROR;
+	size = (size+1) & 0xFE;				// Size needs to be a multiple of halfwords. Round up.
 	uint32_t free = nvfree();
 	if (free < size+2)
 		return nvconsolidate(desc, size, p);
@@ -114,7 +116,7 @@ HAL_StatusTypeDef nvconsolidate(nvstore_desc desc, uint8_t size, void *p)
 	// Using a static buffer for consolidation means risk of race conditions.
 	static uint8_t buf[FLASH_PAGE_SIZE] __attribute__((aligned(8)));// FLASH_PAGE_SIZE IS NV_LEN, but NV_LEN is not constant...
 	uint32_t remaining = NV_LEN;
-	uint32_t len;
+	uint32_t len = 0;
 	void *src;
 
 	for (int i = 0; i < NV_UNUSED; i++)
@@ -122,7 +124,7 @@ HAL_StatusTypeDef nvconsolidate(nvstore_desc desc, uint8_t size, void *p)
 		src = nvfind(i);
 		if (src)
 			len = * ((uint8_t*) src-1);
-		if (i == desc)
+		if (i == desc)								// New value of this record wins over flash value.
 		{
 			len = size;
 			src = p;
@@ -160,7 +162,7 @@ HAL_StatusTypeDef nvconsolidate(nvstore_desc desc, uint8_t size, void *p)
 		}
 
 	HAL_FLASH_Lock();
-
+													// fc_count_page_erase() has its own flash unlock / lock.
 	fc_count_page_erase((NV_START - FLASH_BASE) / PAGE_SIZE);
 
 	return HAL_OK;
