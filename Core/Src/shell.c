@@ -6,6 +6,7 @@
 #include "flash_counter.h"
 #include "LSM303AGR.h"
 #include "main.h"
+#include "nvstore.h"
 #include "shell.h"
 #include "shell_util.h"
 #include "FreeRTOS.h"
@@ -213,7 +214,11 @@ CMD(flasherase, s_flasherase,"[0-7F] Erases flash page." ) \
 CMD(printf,		s_printf, 	"write something to printf." ) \
 CMD(wear,		s_wear,		"readout wear counters.") \
 CMD(mem,		s_mem,		"Gets free heap size of FreeRTOS.") \
-CMD(ps,			s_ps,		"Gets the current tasks list.")
+CMD(ps,			s_ps,		"Gets the current tasks list.") \
+CMD(note,		s_note,		"[note text] Recalls or writes a note.") \
+CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
+CMD(bootcount,	s_bootcount,"Recalls the bootcount") \
+CMD(time,		s_time,		"Recalls or sets time [YYYY MM DD hh mm ss]")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -731,6 +736,86 @@ void s_gyro(int argc, char **argv)
 		sprintf(buf, "%3X %3X\r\n", i, data[i]);
 		shell_tx_str(buf);
 	}
+}
+
+void s_nvstr(const char *name, nvstore_desc key, int argc, char **argv)
+{
+	if (argc == 1)
+	{
+		char* val = (char*) nvfind(key);
+		if (!val)
+			return;
+		shell_tx_str(val);
+		shell_tx_str("\r\n");
+		return;
+	}
+	if (argc >=3)
+		for (char* i = argv[1]; i < argv[argc-1]; i++)
+			if (*i == 0)			// Lijmt alle argumenten aan elkaar
+				*i = ' ';			// Gaat ervan uit dat ze na elkaar liggen in het geheugen.
+	HAL_StatusTypeDef rv = nvstore(key, strlen(argv[1])+1, (void*) argv[1]);
+	if (rv == HAL_OK)
+	{
+		shell_tx_str(name);
+		shell_tx_str(" saved\r\n");
+	}
+	else
+	{
+		shell_tx_str("Failed to save ");
+		shell_tx_str(name);
+		shell_tx_str("\r\n");
+	}
+}
+
+
+void s_note(int argc, char **argv)  {s_nvstr("Note", NV_NOTE, argc, argv);}
+void s_motd(int argc, char **argv)	{s_nvstr("MOTD", NV_MOTD, argc, argv);}
+
+void s_bootcount(int argc, char **argv)
+{
+	uint32_t* bootp = (uint32_t*) nvfind(NV_BOOTCOUNT);
+	uint32_t boot = 0;
+	if (bootp)
+		boot = *bootp;
+
+	char buf[32];
+	sprintf(buf, "Bootcount: %ld\r\n", boot);
+	shell_tx_str(buf);
+}
+
+void s_time(int argc, char **argv)
+{
+	RTC_TimeTypeDef t;
+	RTC_DateTypeDef d;
+	uint32_t Year;
+	if (argc == 1)
+	{
+		HAL_RTC_GetTime(&hrtc, &t, RTC_FORMAT_BIN);
+		HAL_RTC_GetDate(&hrtc, &d, RTC_FORMAT_BIN);
+
+		char buf[64];
+		sprintf(buf, "%04u-%02u-%02u %02u:%02u:%02u\r\n",
+				d.Year + 2000, d.Month, d.Date,
+				t.Hours, t.Minutes, t.Seconds);
+		shell_tx_str(buf);
+	}
+	else if (argc == 7 &&
+			sscanf(argv[1], "%lu", &Year) == 1 &&
+			sscanf(argv[2], "%hhu", &d.Month) == 1 &&
+			sscanf(argv[3], "%hhu", &d.Date) == 1 &&
+			sscanf(argv[4], "%hhu", &t.Hours) == 1 &&
+			sscanf(argv[5], "%hhu", &t.Minutes) == 1 &&
+			sscanf(argv[6], "%hhu", &t.Seconds) == 1)
+	{
+		d.Year = Year - 2000;
+		if (HAL_OK == HAL_RTC_SetTime(&hrtc, &t, RTC_FORMAT_BIN) &&
+			HAL_OK == HAL_RTC_SetDate(&hrtc, &d, RTC_FORMAT_BIN))
+			shell_tx_str("OK\r\n");
+		else
+			shell_tx_str("Error setting RTC.\r\n");
+	}
+	else
+		shell_tx_str("Usage: no arguments to get date/time. [YYYY MM DD hh mm ss] to set time.\r\n");
 }
 
 

@@ -257,8 +257,8 @@ int8_t STORAGE_Write_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t b
   /* USER CODE BEGIN 7 */
 
 	HAL_FLASH_Unlock();
-	int pagenr = (STORAGE_BASE - 0x8000000) / 2048 + blk_addr / 4;
-	uint8_t* page_start = (uint8_t*) (0x8000000 + pagenr*2048);
+	int pagenr = (STORAGE_BASE - FLASH_BASE) / PAGE_SIZE + blk_addr / 4;
+	uint8_t* page_start = (uint8_t*) (FLASH_BASE + pagenr*PAGE_SIZE);
 	static uint8_t page[2048];
 	memcpy(page, page_start, 2048);
 	memcpy(page + 512*(blk_addr % 4), buf, STORAGE_BLK_SIZ);

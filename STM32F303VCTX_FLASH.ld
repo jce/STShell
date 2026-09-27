@@ -48,7 +48,8 @@ MEMORY
   CCMRAM    (xrw)    : ORIGIN = 0x10000000,   LENGTH = 8K
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 40K
   FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 126K
-  STORAGE	(r)		: ORIGIN = 0x801F800,	LENGTH = 128K
+  STORAGE	(r)		: ORIGIN = 0x801F000,	LENGTH = 128K
+  NVSTORE	(r)		: ORIGIN = 0x803F000,	LENGTH = 2K
   COUNTER	(r)		: ORIGIN = 0x803F800,	LENGTH = 2K
 }
 
@@ -215,6 +216,8 @@ SECTIONS
     libgcc.a ( * )
   }
 
+ 
+
   .storage (NOLOAD) :
   {
     . = ALIGN(2048);
@@ -223,7 +226,15 @@ SECTIONS
 	_storage_end = .;
   } > STORAGE    
 
-  .storage (NOLOAD) :
+  .nvstore (NOLOAD) :
+  {
+    . = ALIGN(2048);
+	_nvstore_start = .;
+	. = . + 2K;
+	_nvstore_end = .;
+  } > NVSTORE  
+
+  .counter (NOLOAD) :
   {
     . = ALIGN(2048);
 	_counter_start = .;
@@ -233,3 +244,7 @@ SECTIONS
 
   .ARM.attributes 0 : { *(.ARM.attributes) }
 }
+
+ASSERT((_nvstore_end - _nvstore_start) <= 2K, "nvstore section larger than one flash page")
+ASSERT((_nvstore_start % 2048) == 0, "nvstore section not page aligned")
+ASSERT(((_nvstore_end - _nvstore_start) % 8) == 0, "nvstore section not 64-bit multiple")
