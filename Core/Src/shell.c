@@ -13,6 +13,8 @@
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "task.h"
+#include "pwm.h"
+
 //======================================================================
 // Line editor logic
 
@@ -219,7 +221,8 @@ CMD(ps,			s_ps,		"Gets the current tasks list.") \
 CMD(note,		s_note,		"[note text] Recalls or writes a note.") \
 CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
 CMD(bootcount,	s_bootcount,"Recalls the bootcount.") \
-CMD(time,		s_time,		"Recalls or sets time [YYYY MM DD hh mm ss].")
+CMD(time,		s_time,		"Recalls or sets time [YYYY MM DD hh mm ss].") \
+CMD(pwm,		s_pwm, 		"[0 1 2 3 4 5 6 7] Sets the pwm intensity of onboard leds.")
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -911,7 +914,24 @@ void s_time(int argc, char **argv)
 		shell_tx_str("Usage: no arguments to get date/time. [YYYY MM DD hh mm ss] to set time.\r\n");
 }
 
-
+void s_pwm(int argc, char **argv)
+{
+	uint16_t pwm[8];
+	if (argc == 9 &&
+			sscanf(argv[1], "%hu", pwm+0) == 1 &&
+			sscanf(argv[2], "%hu", pwm+1) == 1 &&
+			sscanf(argv[3], "%hu", pwm+2) == 1 &&
+			sscanf(argv[4], "%hu", pwm+3) == 1 &&
+			sscanf(argv[5], "%hu", pwm+4) == 1 &&
+			sscanf(argv[6], "%hu", pwm+5) == 1 &&
+			sscanf(argv[7], "%hu", pwm+6) == 1 &&
+			sscanf(argv[8], "%hu", pwm+7) == 1
+			)
+		for (int i = 0; i < 8; i++)
+			pwm_set(i, pwm[i]);
+	else
+		shell_tx_str("Usage: [0 1 2 3 4 5 6 7]\r\n");
+}
 
 
 

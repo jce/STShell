@@ -9,7 +9,7 @@
 #define INC_SHELL_H_
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.3.3"
+#define SHELL_VER "0.3.4"
 
 void shell_task();			// For the RTOS
 void shell_rx(uint8_t);	// Receive a character. Whole processing hangs on this one function
@@ -23,7 +23,7 @@ void dispatch();
 // Temporary, for a test
 uint8_t read_mag_reg(uint8_t addr, uint8_t reg);
 
-#define CBLEN 64				// Command Buffer Length
-#define AVLEN 8			// The argument vector maximum length
+#define CBLEN 128			// Command Buffer Length
+#define AVLEN 12			// The argument vector maximum length
 
 #endif /* INC_SHELL_H_ */

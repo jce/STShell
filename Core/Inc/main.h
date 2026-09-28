@@ -92,6 +92,8 @@ void Error_Handler(void);
 #define LD4_GPIO_Port GPIOE
 #define LD3_Pin GPIO_PIN_9
 #define LD3_GPIO_Port GPIOE
+#define LD5_Pin GPIO_PIN_10
+#define LD5_GPIO_Port GPIOE
 #define LD7_Pin GPIO_PIN_11
 #define LD7_GPIO_Port GPIOE
 #define LD9_Pin GPIO_PIN_12
