@@ -583,6 +583,30 @@ static void MX_RTC_Init(void)
     Error_Handler();
   }
 
+//  // Fix some nasty bug... http://efton.sk/STM32/gotcha/g198.html
+//  RTC->CR &= ~(0x01<<6);  -> Does not work by itself.
+//
+//  /* 1. Backup-domain toegang (PWR-kant) */
+//  HAL_PWR_EnableBkUpAccess();
+//
+//  /* 2. RTC write-protect uit (WPR-sleutels, 0xCA dan 0x53) */
+//  RTC->WPR = 0xCA;
+//  RTC->WPR = 0x53;
+//
+//  /* 3. INIT-mode aan en wachten tot de hardware het bevestigt */
+//  RTC->ISR |= RTC_ISR_INIT;
+//  while ((RTC->ISR & RTC_ISR_INITF) == 0) { /* timeout-teller erin bouwen */ }
+//
+//  /* 4. Nu pas: FMT wissen — de dader */
+//  RTC->CR &= ~(1u << 6);          /* RTC_CR_FMT */
+//
+//  /* 5. INIT-mode uit — teller loopt weer */
+//  RTC->ISR &= ~RTC_ISR_INIT;
+//
+//  /* 6. Write-protect terug dicht */
+//  RTC->WPR = 0xFF;
+
+
   /* USER CODE BEGIN Check_RTC_BKUP */
 
   return;	// I dont wish the initializer for date/time.
@@ -591,21 +615,21 @@ static void MX_RTC_Init(void)
 
   /** Initialize RTC and set the Time and Date
   */
-  sTime.Hours = 0;
-  sTime.Minutes = 0;
-  sTime.Seconds = 0;
+  sTime.Hours = 0x0;
+  sTime.Minutes = 0x0;
+  sTime.Seconds = 0x0;
   sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
   sTime.StoreOperation = RTC_STOREOPERATION_RESET;
-  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK)
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) != HAL_OK)
   {
     Error_Handler();
   }
   sDate.WeekDay = RTC_WEEKDAY_MONDAY;
   sDate.Month = RTC_MONTH_JANUARY;
-  sDate.Date = 1;
-  sDate.Year = 0;
+  sDate.Date = 0x1;
+  sDate.Year = 0x0;
 
-  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK)
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
   {
     Error_Handler();
   }

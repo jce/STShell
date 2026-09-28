@@ -79,6 +79,9 @@
 #define OUTZ_L_REG_M		0x6C
 #define OUTZ_H_REG_M		0x6D
 
+#define WHO_AM_I_A_VALUE	0b00110011
+#define WHO_AM_I_M_VALUE	0b01000000
+
 HAL_StatusTypeDef init_LSM303AGR(void);
 void LSM303AGR_10ms_int(void);
 void LSM303AGR_I2C_Callback(void);

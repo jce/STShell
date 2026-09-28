@@ -809,8 +809,8 @@ void s_bootcount(int argc, char **argv)
 
 void s_time(int argc, char **argv)
 {
-	RTC_TimeTypeDef t;
-	RTC_DateTypeDef d;
+	RTC_TimeTypeDef t = {0};
+	RTC_DateTypeDef d = {0};
 	uint32_t Year;
 	if (argc == 1)
 	{
