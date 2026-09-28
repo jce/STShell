@@ -8,6 +8,8 @@
 #include "LSM303AGR.h"
 #include "main.h"
 #include "shell.h"
+#include "nvstore.h"
+#include "string.h"
 
 #define VERIFY(DST, REG, VAL) \
 	{	\
@@ -30,6 +32,8 @@
 		VERIFY(DST, REG, VAL) \
 	}
 
+int16_t LSM303AGR_cal[3] = {0};			// x, y, z hard-iron offsets
+
 // Init de LSM303AGR
 HAL_StatusTypeDef init_LSM303AGR(void)
 {
@@ -39,6 +43,11 @@ HAL_StatusTypeDef init_LSM303AGR(void)
 	CONF(LSM303AGR_ADDR_A, CTRL_REG1_A, 0b01010111);
 	CONF(LSM303AGR_ADDR_A, CTRL_REG4_A, 0b10001000);
 	CONF(LSM303AGR_ADDR_M, CFG_REG_A_M, 0b10000000);
+
+	void *calp = nvfind(NV_LSM303AGR_MAGCAL);
+	if (calp)
+		memcpy(LSM303AGR_cal, calp, sizeof(LSM303AGR_cal));
+
 	return HAL_OK;
 }
 
@@ -92,12 +101,12 @@ void LSM303AGR_I2C_Callback(void)
 
 	if (LSM303AGR_state == LSMMAG)
 	{
-		raw = (int16_t)((LSM303AGR_buf[1] << 8) | LSM303AGR_buf[0]);
-		lsm303agr.mag.x = raw * 0.0015f;
-		raw = (int16_t)((LSM303AGR_buf[3] << 8) | LSM303AGR_buf[2]);
-		lsm303agr.mag.y = raw * 0.0015f;
-		raw = (int16_t)((LSM303AGR_buf[5] << 8) | LSM303AGR_buf[4]);
-		lsm303agr.mag.z = raw * 0.0015f;
+		lsm303agr.magraw.x = (int16_t)((LSM303AGR_buf[1] << 8) | LSM303AGR_buf[0]);
+		lsm303agr.mag.x = (lsm303agr.magraw.x - LSM303AGR_cal[0]) * MAG_RAW_TO_GAUSS;
+		lsm303agr.magraw.y = (int16_t)((LSM303AGR_buf[3] << 8) | LSM303AGR_buf[2]);
+		lsm303agr.mag.y = (lsm303agr.magraw.y - LSM303AGR_cal[1]) * MAG_RAW_TO_GAUSS;
+		lsm303agr.magraw.z = (int16_t)((LSM303AGR_buf[5] << 8) | LSM303AGR_buf[4]);
+		lsm303agr.mag.z = (lsm303agr.magraw.z - LSM303AGR_cal[2]) * MAG_RAW_TO_GAUSS;
 
 		LSM303AGR_state = LSMDONE;
 		return;
@@ -108,4 +117,5 @@ void LSM303AGR_I2C_Err_Callback(void)
 {
 	LSM303AGR_state = LSMERROR;
 }
+
 

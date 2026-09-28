@@ -7,6 +7,7 @@
 
 #include "I3G4250D.h"
 
+
 struct S_I3G4250D i3g4250d;
 
 #define EXIT_FAILURE \

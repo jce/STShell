@@ -82,6 +82,8 @@
 #define WHO_AM_I_A_VALUE	0b00110011
 #define WHO_AM_I_M_VALUE	0b01000000
 
+#define MAG_RAW_TO_GAUSS	0.0015f
+
 HAL_StatusTypeDef init_LSM303AGR(void);
 void LSM303AGR_10ms_int(void);
 void LSM303AGR_I2C_Callback(void);
@@ -92,13 +94,19 @@ struct S_LSM303AGRXYZ {
 	float y;
 	float z;
 };
+struct S_LSM303AGRXYZraw {
+	int16_t x;
+	int16_t y;
+	int16_t z;
+};
 struct S_LSM303AGR {				// Let op, structure is niet atomic geschreven.
 		float temp;					// Temperature in [degC]
 		struct S_LSM303AGRXYZ acc;	// Acceleration in [G]
 		struct S_LSM303AGRXYZ mag;	// Magnetic field in [Gauss]
+		struct S_LSM303AGRXYZraw magraw;	// Raw readout of the magnetic sensor.
 };
 extern struct S_LSM303AGR lsm303agr;
 
-
+extern int16_t LSM303AGR_cal[3];	// Raw XYZ calibration values: hard iron offsets.
 
 #endif /* INC_LSM303AGR_H_ */

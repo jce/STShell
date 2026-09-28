@@ -206,7 +206,7 @@ CMD(clear,		s_clear, 	"Clear screen.") \
 CMD(live,		s_live,		"Live view of peripherhals.") \
 CMD(rd,			s_read,		"[begin [length]] Read memory location.") \
 CMD(stack,		s_stack,	"[paint, show] Display stack max usage.") \
-CMD(mag,		s_mag,		"Shows magnetometer readout.") \
+CMD(mag,		s_mag,		"Shows magnetometer readout. [cal] to calibrate.") \
 CMD(lin,		s_lin,		"Shows linear accelerometer readout.") \
 CMD(gyro,		s_gyro,		"Shows gyrometer readout.") \
 CMD(page,		s_page,		"[0-7F] Reads and prints flash page." ) \
@@ -389,7 +389,6 @@ void s_live_gpiosec(uint16_t gpio)
 
 void s_live_gpioline()
 {
-	shell_tx_str("\033[0;0H");
 	uint16_t port_a = GPIOA->IDR;  // Input Data Register, 16 bits
 	uint16_t port_b = GPIOB->IDR;
 	uint16_t port_c = GPIOC->IDR;
@@ -467,6 +466,7 @@ void s_live(int argc, char **argv)
 	shell_tx_str("\x1b[?25l" "\033[2J"); // Cursur hide, home.
 	while ( xQueueReceive(STShell_RXHandle, &c, 0) != pdTRUE )
 	{
+		shell_tx_str("\033[0;0H");
 		s_live_gpioline();
 		s_live_temp_vbat_vref_line();
 		s_adc_line(&hadc1);
@@ -574,14 +574,83 @@ uint8_t read_mag_reg(uint8_t addr, uint8_t reg)
 	return 0xFE;
 }
 
+void magcalline(const char* name, int16_t value, int16_t min, int16_t max, int16_t scale)
+{
+	char buf[67];
+	sprintf(buf, "%s: %5d / %5d / %5d  ", name, min, value, max);
+	shell_tx_str(buf);
+	int have_o = 0;
+	for (int i = 0; i < 64; i++)
+	{
+		int16_t pos = (2*scale) * i / 64 - scale;	// Translate i to a position on the scale
+		if (pos < min)
+			buf[i] = '#';
+		else if (pos < value)
+			buf[i] = '-';
+		else if (pos >= value && !have_o)
+			{buf[i] = 'o'; have_o = 1;}
+		else if (pos < max)
+			buf[i] = '-';
+		else
+			buf[i] = '#';
+	}
+	buf[64] = '\r';
+	buf[65] = '\n';
+	buf[66] = 0;
+	shell_tx_str(buf);
+}
+
+void magcal()
+{
+	#define RANGE 1000
+	int16_t x = lsm303agr.magraw.x;
+	int16_t y = lsm303agr.magraw.y;
+	int16_t z = lsm303agr.magraw.z;
+	int16_t xmin = x, xmax = x, ymin = y, ymax = y, zmin = z, zmax = z;
+	char c;
+	shell_tx_str("\x1b[?25l" "\033[2J"); // Cursur hide, home.
+	while ( xQueueReceive(STShell_RXHandle, &c, 0) != pdTRUE )
+	{
+		x = lsm303agr.magraw.x;
+		y = lsm303agr.magraw.y;
+		z = lsm303agr.magraw.z;
+		if (x < xmin)	xmin = x;
+		if (x > xmax) 	xmax = x;
+		if (y < ymin)	ymin = y;
+		if (y > ymax) 	ymax = y;
+		if (z < zmin)	zmin = z;
+		if (z > zmax) 	zmax = z;
+		shell_tx_str("\033[0;0H");
+		magcalline("X", x, xmin, xmax, RANGE);
+		magcalline("Y", y, ymin, ymax, RANGE);
+		magcalline("Z", z, zmin, zmax, RANGE);
+
+		osDelay(100);
+	}
+	shell_tx_str("\x1b[?25h" "\033[0;0H" "\033[2J"); // Cursor aan, home, clearscreen.
+	LSM303AGR_cal[0] = (xmax-xmin)/2 + xmin;
+	LSM303AGR_cal[1] = (ymax-ymin)/2 + ymin;
+	LSM303AGR_cal[2] = (zmax-zmin)/2 + zmin;
+	HAL_StatusTypeDef rv = nvstore(NV_LSM303AGR_MAGCAL, sizeof(LSM303AGR_cal), (void *) LSM303AGR_cal);
+	if (rv == HAL_OK)
+		shell_tx_str("Calibration stored.\r\n");
+	else
+		shell_tx_str("Calibration storing failed.\r\n");
+}
+
 void s_mag(int argc, char **argv)
 {
-	char buf[32];
-	for (int i = 0; i < 0x100; i++)
+	if (argc == 2 && strcmp(argv[1], "cal") == 0)
+		magcal();
+	else
 	{
-		uint8_t rv = read_mag_reg(LSM303AGR_ADDR_M, i);
-		sprintf(buf, "%3X %3X %3X\r\n", LSM303AGR_ADDR_M>>1, i, rv);
-		shell_tx_str(buf);
+		char buf[32];
+		for (int i = 0; i < 0x100; i++)
+		{
+			uint8_t rv = read_mag_reg(LSM303AGR_ADDR_M, i);
+			sprintf(buf, "%3X %3X %3X\r\n", LSM303AGR_ADDR_M>>1, i, rv);
+			shell_tx_str(buf);
+		}
 	}
 }
 
