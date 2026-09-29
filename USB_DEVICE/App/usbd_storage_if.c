@@ -24,6 +24,7 @@
 /* USER CODE BEGIN INCLUDE */
 
 #include "flash_counter.h"
+#include "pwm.h"
 
 /* USER CODE END INCLUDE */
 
@@ -187,6 +188,7 @@ USBD_StorageTypeDef USBD_Storage_Interface_fops_FS =
 int8_t STORAGE_Init_FS(uint8_t lun)
 {
   /* USER CODE BEGIN 2 */
+	usb_event();
   return (USBD_OK);
   /* USER CODE END 2 */
 }
@@ -201,6 +203,7 @@ int8_t STORAGE_Init_FS(uint8_t lun)
 int8_t STORAGE_GetCapacity_FS(uint8_t lun, uint32_t *block_num, uint16_t *block_size)
 {
   /* USER CODE BEGIN 3 */
+	usb_event();
   *block_num  = STORAGE_BLK_NBR;
   *block_size = STORAGE_BLK_SIZ;
   return (USBD_OK);
@@ -215,6 +218,7 @@ int8_t STORAGE_GetCapacity_FS(uint8_t lun, uint32_t *block_num, uint16_t *block_
 int8_t STORAGE_IsReady_FS(uint8_t lun)
 {
   /* USER CODE BEGIN 4 */
+	//usb_event();
   return (USBD_OK);
   /* USER CODE END 4 */
 }
@@ -227,6 +231,7 @@ int8_t STORAGE_IsReady_FS(uint8_t lun)
 int8_t STORAGE_IsWriteProtected_FS(uint8_t lun)
 {
   /* USER CODE BEGIN 5 */
+	usb_event();
   return (USBD_OK);
   /* USER CODE END 5 */
 }
@@ -238,6 +243,7 @@ int8_t STORAGE_IsWriteProtected_FS(uint8_t lun)
   */
 int8_t STORAGE_Read_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t blk_len)
 {
+	usb_event();
   /* USER CODE BEGIN 6 */
 	  if (blk_addr + blk_len > STORAGE_BLK_NBR)
 	    return USBD_FAIL;
@@ -255,7 +261,7 @@ int8_t STORAGE_Read_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t bl
 int8_t STORAGE_Write_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t blk_len)
 {
   /* USER CODE BEGIN 7 */
-
+	usb_event();
 	HAL_FLASH_Unlock();
 	int pagenr = (STORAGE_BASE - FLASH_BASE) / PAGE_SIZE + blk_addr / 4;
 	uint8_t* page_start = (uint8_t*) (FLASH_BASE + pagenr*PAGE_SIZE);
@@ -284,6 +290,7 @@ int8_t STORAGE_Write_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t b
 int8_t STORAGE_GetMaxLun_FS(void)
 {
   /* USER CODE BEGIN 8 */
+	usb_event();
   return (STORAGE_LUN_NBR - 1);
   /* USER CODE END 8 */
 }
@@ -292,6 +299,7 @@ int8_t STORAGE_GetMaxLun_FS(void)
 
 HAL_StatusTypeDef flash_erase_page(uint32_t addr)
 {
+	usb_event();
   FLASH_EraseInitTypeDef erase;
   uint32_t err = 0;
 

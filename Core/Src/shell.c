@@ -222,7 +222,7 @@ CMD(note,		s_note,		"[note text] Recalls or writes a note.") \
 CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
 CMD(bootcount,	s_bootcount,"Recalls the bootcount.") \
 CMD(time,		s_time,		"Recalls or sets time [YYYY MM DD hh mm ss].") \
-CMD(pwm,		s_pwm, 		"[0 1 2 3 4 5 6 7] Sets the pwm intensity of onboard leds. [off], or [compass].") \
+CMD(pwm,		s_pwm, 		"[0 1 2 3 4 5 6 7] Sets the pwm intensity of onboard leds. [off], [compass], [rodo], or [usb].") \
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -936,8 +936,12 @@ void s_pwm(int argc, char **argv)
 		}
 	else if (argc == 2 && strcmp(argv[1], "compass") == 0)
 		pwm_set_mode(PWM_COMPASS);
+	else if (argc == 2 && strcmp(argv[1], "rodo") == 0)
+		pwm_set_mode(PWM_RODO);
+	else if (argc == 2 && strcmp(argv[1], "usb") == 0)
+		pwm_set_mode(PWM_USB);
 	else
-		shell_tx_str("Usage: [0 1 2 3 4 5 6 7], [off], or [compass]\r\n");
+		shell_tx_str("Usage: [0 1 2 3 4 5 6 7], [off], [compass], [rodo] or [usb]\r\n");
 }
 
 

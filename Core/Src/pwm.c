@@ -17,7 +17,7 @@
 
 volatile uint16_t pwm[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 volatile uint8_t pwm_mode = PWM_OFF;
-
+volatile float usbsignal = 0.0f;
 void pwm_set_mode(uint8_t mode)
 {
 	pwm_mode = mode;
@@ -100,7 +100,6 @@ void pwm_task(void)
 			init_pwm();
 		if (pwm_mode != pwm_mode_prev && pwm_mode == PWM_OFF)
 			deinit_pwm();
-		pwm_mode_prev = pwm_mode;
 
 		if (pwm_mode == PWM_COMPASS)
 		{
@@ -113,11 +112,43 @@ void pwm_task(void)
 			if (left > 7)							// prevents left == 8
 				left = 0;
 			float ipart = leftf - left;
-			pwm[left] = 			(uint16_t) ((1-ipart) * ICOMPASS);
-			pwm[(left + 1) % 8] =	(uint16_t) (ipart * ICOMPASS);
+			pwm[left] = 			(uint16_t) ((1-ipart) * IMAX);
+			pwm[(left + 1) % 8] =	(uint16_t) (ipart * IMAX);
 		}
-	    osDelay(10);
+
+		if (pwm_mode == PWM_RODO)
+		{
+			pwm[0] = pwm[1] = pwm[2] = pwm[3] = pwm[4] = pwm[5] = pwm[6] = pwm[7] = 0;
+
+			float now = (float) osKernelGetTickCount() / osKernelGetTickFreq();
+			float phase = fmodf(now / RODO_PERIOD, 1.0f);
+
+			float leftf = phase * 8;
+			int left = (int) leftf;
+			if (left > 7)							// prevents left == 8
+				left = 0;
+			float ipart = leftf - left;
+			pwm[left] = 			(uint16_t) ((1-ipart) * IMAX);
+			pwm[(left + 1) % 8] =	(uint16_t) (ipart * IMAX);
+		}
+
+		if (pwm_mode == PWM_USB)
+		{
+			if (pwm_mode_prev != PWM_USB)
+				usbsignal = 0.0f;
+			//float dt = (float)SCAN_DT / 1000.0f;
+			pwm[0] = pwm[1] = pwm[2] = pwm[3] = pwm[4] = pwm[5] = pwm[6] = pwm[7] = usbsignal * IMAX;
+			usbsignal *= expf(-SCAN_DT / (1000.0f * USB_TAU));
+		}
+
+		pwm_mode_prev = pwm_mode;
+	    osDelay(SCAN_DT);
 	}
+}
+
+void usb_event(void)
+{
+	usbsignal = 1.0f;
 }
 
 // Preloading the pwms only at the rollover prevents skipping the turn-off-event
