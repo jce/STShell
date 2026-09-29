@@ -38,6 +38,11 @@ HAL_StatusTypeDef nvstore(nvstore_desc desc, uint8_t size, void *p)
 {
 	if (size > 254)						// Rounding 255 upwards would turn into 0.
 		return HAL_ERROR;
+
+	void* current = nvfind(desc);		// Check if the flash contents are set correctly already.
+	if (current && memcmp(current, p, size) == 0)
+		return HAL_OK;
+
 	size = (size+1) & 0xFE;				// Size needs to be a multiple of halfwords. Round up.
 	uint32_t free = nvfree();
 	if (free < size+2)

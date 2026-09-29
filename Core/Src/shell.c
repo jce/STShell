@@ -222,7 +222,7 @@ CMD(note,		s_note,		"[note text] Recalls or writes a note.") \
 CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
 CMD(bootcount,	s_bootcount,"Recalls the bootcount.") \
 CMD(time,		s_time,		"Recalls or sets time [YYYY MM DD hh mm ss].") \
-CMD(pwm,		s_pwm, 		"[0 1 2 3 4 5 6 7] Sets the pwm intensity of onboard leds.")
+CMD(pwm,		s_pwm, 		"[0 1 2 3 4 5 6 7] Sets the pwm intensity of onboard leds. [off], or [compass].") \
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -917,7 +917,9 @@ void s_time(int argc, char **argv)
 void s_pwm(int argc, char **argv)
 {
 	uint16_t pwm[8];
-	if (argc == 9 &&
+	if (argc == 2 && strcmp(argv[1], "off") == 0)
+		pwm_set_mode(PWM_OFF);
+	else if (argc == 9 &&
 			sscanf(argv[1], "%hu", pwm+0) == 1 &&
 			sscanf(argv[2], "%hu", pwm+1) == 1 &&
 			sscanf(argv[3], "%hu", pwm+2) == 1 &&
@@ -927,10 +929,15 @@ void s_pwm(int argc, char **argv)
 			sscanf(argv[7], "%hu", pwm+6) == 1 &&
 			sscanf(argv[8], "%hu", pwm+7) == 1
 			)
-		for (int i = 0; i < 8; i++)
-			pwm_set(i, pwm[i]);
+		{
+			pwm_set_mode(PWM_MANUAL);
+			for (int i = 0; i < 8; i++)
+				pwm_set(i, pwm[i]);
+		}
+	else if (argc == 2 && strcmp(argv[1], "compass") == 0)
+		pwm_set_mode(PWM_COMPASS);
 	else
-		shell_tx_str("Usage: [0 1 2 3 4 5 6 7]\r\n");
+		shell_tx_str("Usage: [0 1 2 3 4 5 6 7], [off], or [compass]\r\n");
 }
 
 

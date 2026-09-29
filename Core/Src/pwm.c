@@ -9,11 +9,20 @@
 #include "cmsis_os2.h"
 #include "stm32f303xc.h"
 #include "main.h"
+#include "math.h"
 
-
+#include "LSM303AGR.h"
+#include "nvstore.h"
 #include "pwm.h"
 
 volatile uint16_t pwm[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+volatile uint8_t pwm_mode = PWM_OFF;
+
+void pwm_set_mode(uint8_t mode)
+{
+	pwm_mode = mode;
+	nvstore(NV_PWMMODE, 1, (void*) &pwm_mode);
+}
 
 void pwm_set(uint16_t i, uint16_t v)
 {
@@ -23,7 +32,7 @@ void pwm_set(uint16_t i, uint16_t v)
 
 // Mistral wrote this. I follow what is happening and agree with it, but did not
 // come up with it myself.
-void init_ledpwm(void)
+void init_pwm(void)
 {
     /* 1. Klok op de timers (RCC, APB1) */
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN | RCC_APB1ENR_TIM4EN;
@@ -57,14 +66,57 @@ void init_ledpwm(void)
     TIM3->CR1 = TIM_CR1_CEN;                /* master start, trekt TIM4 mee */
 }
 
+void deinit_pwm(void)
+{
+    TIM3->DIER = 0;
+    TIM4->DIER = 0;
+    NVIC_DisableIRQ(TIM3_IRQn);
+    NVIC_DisableIRQ(TIM4_IRQn);
+    TIM3->CR1 = 0;
+    TIM4->CR1 = 0;
+    //TIM3->CCER = 0;
+    //TIM4->CCER = 0;
+
+    LD3_GPIO_Port->BSRR = (uint32_t)LD3_Pin << 16;
+    LD5_GPIO_Port->BSRR = (uint32_t)LD5_Pin << 16;
+    LD7_GPIO_Port->BSRR = (uint32_t)LD7_Pin << 16;
+    LD9_GPIO_Port->BSRR = (uint32_t)LD9_Pin << 16;
+    LD10_GPIO_Port->BSRR = (uint32_t)LD10_Pin << 16;
+    LD8_GPIO_Port->BSRR = (uint32_t)LD8_Pin << 16;
+    LD6_GPIO_Port->BSRR = (uint32_t)LD6_Pin << 16;
+    LD4_GPIO_Port->BSRR = (uint32_t)LD4_Pin << 16;
+}
+
 void pwm_task(void)
 {
-	init_ledpwm();
+	void* p = nvfind(NV_PWMMODE);
+	if (p)
+		pwm_mode = * (uint8_t*) p;
+	uint8_t pwm_mode_prev = PWM_OFF;
 
 	while(1)
 	{
+		if (pwm_mode != pwm_mode_prev && pwm_mode_prev == PWM_OFF)
+			init_pwm();
+		if (pwm_mode != pwm_mode_prev && pwm_mode == PWM_OFF)
+			deinit_pwm();
+		pwm_mode_prev = pwm_mode;
 
-	    osDelay(1);
+		if (pwm_mode == PWM_COMPASS)
+		{
+			pwm[0] = pwm[1] = pwm[2] = pwm[3] = pwm[4] = pwm[5] = pwm[6] = pwm[7] = 0;
+			float heading = atan2f(-lsm303agr.mag.x, lsm303agr.mag.y) / ((float)M_PI * 2);
+			if (heading < 0)
+				heading += 1.0f;					// Heading [0..1] for one rotation
+			float leftf = heading * 8;
+			int left = (int) leftf;
+			if (left > 7)							// prevents left == 8
+				left = 0;
+			float ipart = leftf - left;
+			pwm[left] = 			(uint16_t) ((1-ipart) * ICOMPASS);
+			pwm[(left + 1) % 8] =	(uint16_t) (ipart * ICOMPASS);
+		}
+	    osDelay(10);
 	}
 }
 
