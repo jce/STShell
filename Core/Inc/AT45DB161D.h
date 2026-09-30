@@ -71,4 +71,8 @@ uint8_t at45_status(void);								// Returns the status page.
 HAL_StatusTypeDef at45_read_page(uint8_t*, uint16_t pageaddr);	// Reads 512 byte page.
 HAL_StatusTypeDef at45_write_page(uint8_t*, uint16_t pageaddr);	// Reads 512 byte page.
 
+#define AT_NUM_PAGES 								4096
+#define AT_RESERVED_PAGES 							256
+#define AT_PAGE_SIZE								512
+
 #endif /* INC_AT45DB161D_H_ */

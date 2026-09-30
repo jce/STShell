@@ -25,6 +25,7 @@
 
 #include "flash_counter.h"
 #include "pwm.h"
+#include "AT45DB161D.h"
 
 /* USER CODE END INCLUDE */
 
@@ -204,8 +205,10 @@ int8_t STORAGE_GetCapacity_FS(uint8_t lun, uint32_t *block_num, uint16_t *block_
 {
   /* USER CODE BEGIN 3 */
 	usb_event();
-  *block_num  = STORAGE_BLK_NBR;
-  *block_size = STORAGE_BLK_SIZ;
+//  *block_num  = STORAGE_BLK_NBR;
+//  *block_size = STORAGE_BLK_SIZ;
+	  *block_num  = AT_NUM_PAGES - AT_RESERVED_PAGES;
+	  *block_size = AT_PAGE_SIZE;
   return (USBD_OK);
   /* USER CODE END 3 */
 }
@@ -244,10 +247,16 @@ int8_t STORAGE_IsWriteProtected_FS(uint8_t lun)
 int8_t STORAGE_Read_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t blk_len)
 {
   /* USER CODE BEGIN 6 */
-	  if (blk_addr + blk_len > STORAGE_BLK_NBR)
-	    return USBD_FAIL;
-	 // memcpy(buf, &storage[blk_addr * STORAGE_BLK_SIZ], blk_len * STORAGE_BLK_SIZ);
-	 memcpy(buf, (uint8_t*)(STORAGE_BASE + blk_addr * STORAGE_BLK_SIZ), blk_len * STORAGE_BLK_SIZ);
+	usb_event();
+	if (blk_len > 1 || blk_addr >= AT_NUM_PAGES - AT_RESERVED_PAGES)
+		return USBD_FAIL;
+	if (HAL_OK != at45_read_page(buf, blk_addr))
+		return USBD_FAIL;
+//	  if (blk_addr + blk_len > STORAGE_BLK_NBR)
+//	    return USBD_FAIL;
+//	 // memcpy(buf, &storage[blk_addr * STORAGE_BLK_SIZ], blk_len * STORAGE_BLK_SIZ);
+//	 memcpy(buf, (uint8_t*)(STORAGE_BASE + blk_addr * STORAGE_BLK_SIZ), blk_len * STORAGE_BLK_SIZ);
+
   return (USBD_OK);
   /* USER CODE END 6 */
 }
@@ -261,20 +270,24 @@ int8_t STORAGE_Write_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t b
 {
   /* USER CODE BEGIN 7 */
 	usb_event();
-	HAL_FLASH_Unlock();
-	int pagenr = (STORAGE_BASE - FLASH_BASE) / PAGE_SIZE + blk_addr / 4;
-	uint8_t* page_start = (uint8_t*) (FLASH_BASE + pagenr*PAGE_SIZE);
-	static uint8_t page[2048];
-	memcpy(page, page_start, 2048);
-	memcpy(page + 512*(blk_addr % 4), buf, STORAGE_BLK_SIZ);
-	flash_erase_page((uint32_t) page_start);
-	for (int i = 0; i < 512; i++)
-	{
-		HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t) page_start + 4 * i, *(uint32_t*) (page + 4*i) );
-	}
-	HAL_FLASH_Lock();
-
-	fc_count_page_erase(pagenr);
+	if (blk_len > 1 || blk_addr >= AT_NUM_PAGES - AT_RESERVED_PAGES)
+		return USBD_FAIL;
+	if (HAL_OK != at45_write_page(buf, blk_addr))
+		return USBD_FAIL;
+//	HAL_FLASH_Unlock();
+//	int pagenr = (STORAGE_BASE - FLASH_BASE) / PAGE_SIZE + blk_addr / 4;
+//	uint8_t* page_start = (uint8_t*) (FLASH_BASE + pagenr*PAGE_SIZE);
+//	static uint8_t page[2048];
+//	memcpy(page, page_start, 2048);
+//	memcpy(page + 512*(blk_addr % 4), buf, STORAGE_BLK_SIZ);
+//	flash_erase_page((uint32_t) page_start);
+//	for (int i = 0; i < 512; i++)
+//	{
+//		HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t) page_start + 4 * i, *(uint32_t*) (page + 4*i) );
+//	}
+//	HAL_FLASH_Lock();
+//
+//	fc_count_page_erase(pagenr);
 
 
   return (USBD_OK);

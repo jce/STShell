@@ -5,6 +5,10 @@
  *      Author: jeindhoven
  */
 
+// Left the chip in factory default 528-bytes-per-page mode. Changing this is irreversible
+// per flashchip, and requires changing the addressing scheme. Only the first 512 bytes are
+// used now anyways.
+
 #include "AT45DB161D.h"
 #include "main.h"
 
