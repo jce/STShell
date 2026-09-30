@@ -47,6 +47,7 @@ extern osMessageQueueId_t STShell_RXHandle, STShell_TXHandle;
 
 extern SPI_HandleTypeDef hspi1;
 extern RTC_HandleTypeDef hrtc;
+extern SPI_HandleTypeDef hspi2;
 
 /* USER CODE END ET */
 
@@ -104,6 +105,8 @@ void Error_Handler(void);
 #define LD8_GPIO_Port GPIOE
 #define LD6_Pin GPIO_PIN_15
 #define LD6_GPIO_Port GPIOE
+#define SPI2_CS_Pin GPIO_PIN_8
+#define SPI2_CS_GPIO_Port GPIOD
 #define DM_Pin GPIO_PIN_11
 #define DM_GPIO_Port GPIOA
 #define DP_Pin GPIO_PIN_12

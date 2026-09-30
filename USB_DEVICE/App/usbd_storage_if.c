@@ -243,7 +243,6 @@ int8_t STORAGE_IsWriteProtected_FS(uint8_t lun)
   */
 int8_t STORAGE_Read_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t blk_len)
 {
-	usb_event();
   /* USER CODE BEGIN 6 */
 	  if (blk_addr + blk_len > STORAGE_BLK_NBR)
 	    return USBD_FAIL;
