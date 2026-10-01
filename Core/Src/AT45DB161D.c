@@ -31,6 +31,63 @@ HAL_StatusTypeDef at45_read_page(uint8_t *buf, uint16_t pageaddr)
     return rv;
 }
 
+HAL_StatusTypeDef at45_read_page_ll(uint8_t *buf, uint16_t pageaddr)
+{
+    uint8_t txdata[8] = {0};
+    txdata[0] = Main_Memory_Page_Read;
+    txdata[1] = pageaddr >> 6;
+    txdata[2] = (pageaddr & 0b00111111) << 2;
+
+    SPI2_CS_LOW;
+    /* commando + 4 dummy: HAL is prima voor 8 bytes (± 5 µs overhead) */
+    if (HAL_SPI_Transmit(&hspi2, txdata, 8, SPI2_TIMEOUT) != HAL_OK) {
+        SPI2_CS_HIGH;
+        return HAL_ERROR;
+    }
+    /* data: strakke lus, alleen RXNE-flag en DR */
+    for (uint16_t i = 0; i < 512; i++) {
+        while (!(SPI2->SR & SPI_SR_TXE)) { }        // wacht tot TX verzet is
+        *(uint8_t *) &SPI2->DR = 0xFF;              // dummy uitzenden → klok → chip schuift data in
+        while (!(SPI2->SR & SPI_SR_RXNE)) { }       // nu komt de byte gegarandeerd
+        buf[i] = (uint8_t) SPI2->DR;
+    }
+    SPI2_CS_HIGH;
+    return HAL_OK;
+}
+
+/* ergens globaal */
+static volatile uint8_t dma_rx_done;
+
+/* de HAL-callback die de DMA-complete via SPI krijgt */
+void HAL_SPI_RxCpltCallback_SPI2()
+{
+    dma_rx_done = 1;
+}
+
+HAL_StatusTypeDef at45_read_page_dma(uint8_t *buf, uint16_t pageaddr)
+{
+    uint8_t txdata[8] = {0};
+    txdata[0] = Main_Memory_Page_Read;
+    txdata[1] = pageaddr >> 6;
+    txdata[2] = (pageaddr & 0b00111111) << 2;
+
+    SPI2_CS_LOW;
+    if (HAL_SPI_Transmit(&hspi2, txdata, 8, SPI2_TIMEOUT) != HAL_OK) {
+        SPI2_CS_HIGH;
+        return HAL_ERROR;
+    }
+
+    dma_rx_done = 0;
+    if (HAL_SPI_Receive_DMA(&hspi2, buf, 512) != HAL_OK) {
+        SPI2_CS_HIGH;
+        return HAL_ERROR;
+    }
+    while (!dma_rx_done) { }          /* RAM-lees, geen peripheral-bus, geen flag-flits */
+    while (SPI2->SR & SPI_SR_BSY) { } /* laatste byte uit de shifter */
+    SPI2_CS_HIGH;
+    return HAL_OK;
+}
+
 uint8_t at45_status(void)
 {
 	uint8_t rv;

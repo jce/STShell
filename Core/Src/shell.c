@@ -15,6 +15,7 @@
 #include "task.h"
 #include "pwm.h"
 #include "AT45DB161D.h"
+#include "AT45_bench.h"
 //======================================================================
 // Line editor logic
 
@@ -223,7 +224,9 @@ CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
 CMD(bootcount,	s_bootcount,"Recalls the bootcount.") \
 CMD(time,		s_time,		"[YYYY MM DD hh mm ss] Recalls or sets time.") \
 CMD(pwm,		s_pwm, 		"[0 1 2 3 4 5 6 7] Sets the pwm intensity of onboard leds. [off], [compass], [rodo], or [usb].") \
-CMD(at45,		s_at45,		"[read/write] [page] [content] test AT45 connection") \
+CMD(at45,		s_at45,		"[read/write] [page] [content] test AT45 connection.") \
+CMD(bench,		s_bench,	"[read/readll/readdma/write] [n] benchmark AT45 flash.") \
+CMD(spi2baud,	s_spi2baud,	"prints SPI2 baudrate.") \
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -980,5 +983,23 @@ void s_at45(int argc, char **argv)
 	shell_tx_str("Usage: [read/write] [page] [content]\r\n");
 }
 
+void s_spi2baud(int argc, char **argv)
+{
+	// print even de werkelijke baud
+	char buf[64];
+	sprintf(buf, "PCLK1=%lu  presc=%lu  SPIbaud=%lu\r\n",
+	        HAL_RCC_GetPCLK1Freq(),
+	        (hspi2.Init.BaudRatePrescaler >> 3) + 1,
+	        HAL_RCC_GetPCLK1Freq() / ((hspi2.Init.BaudRatePrescaler >> 3) + 1));
+	shell_tx_str(buf);
+
+	bench_delay_init();
+	uint32_t t0 = bench_ticks();
+	HAL_Delay(100);   // exact 100 ms volgens TIM6-tick
+	uint32_t t1 = bench_ticks();
+
+	sprintf(buf, "check: %lu cycles\r\n", t1 - t0);
+	shell_tx_str(buf);
+}
 
 

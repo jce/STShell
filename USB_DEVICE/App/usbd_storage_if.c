@@ -250,8 +250,9 @@ int8_t STORAGE_Read_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t bl
 	usb_event();
 	if (blk_len > 1 || blk_addr >= AT_NUM_PAGES - AT_RESERVED_PAGES)
 		return USBD_FAIL;
-	if (HAL_OK != at45_read_page(buf, blk_addr))
+	if (HAL_OK != at45_read_page_dma(buf, blk_addr))
 		return USBD_FAIL;
+
 //	  if (blk_addr + blk_len > STORAGE_BLK_NBR)
 //	    return USBD_FAIL;
 //	 // memcpy(buf, &storage[blk_addr * STORAGE_BLK_SIZ], blk_len * STORAGE_BLK_SIZ);
@@ -274,6 +275,7 @@ int8_t STORAGE_Write_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t b
 		return USBD_FAIL;
 	if (HAL_OK != at45_write_page(buf, blk_addr))
 		return USBD_FAIL;
+
 //	HAL_FLASH_Unlock();
 //	int pagenr = (STORAGE_BASE - FLASH_BASE) / PAGE_SIZE + blk_addr / 4;
 //	uint8_t* page_start = (uint8_t*) (FLASH_BASE + pagenr*PAGE_SIZE);
@@ -288,7 +290,6 @@ int8_t STORAGE_Write_FS(uint8_t lun, uint8_t *buf, uint32_t blk_addr, uint16_t b
 //	HAL_FLASH_Lock();
 //
 //	fc_count_page_erase(pagenr);
-
 
   return (USBD_OK);
   /* USER CODE END 7 */
