@@ -68,8 +68,8 @@
 #define Status_Register_Read_Legacy					0x57
 
 uint8_t at45_status(void);								// Returns the status page.
-HAL_StatusTypeDef at45_read_page(uint8_t*, uint16_t pageaddr);	// Reads 512 byte page.
-HAL_StatusTypeDef at45_write_page(uint8_t*, uint16_t pageaddr);	// Reads 512 byte page.
+HAL_StatusTypeDef at45_read_page(uint8_t *buf, uint16_t pageaddr);	// Reads 512 byte page.
+HAL_StatusTypeDef at45_write_page(uint8_t *buf, uint16_t pageaddr);	// Reads 512 byte page.
 HAL_StatusTypeDef at45_read_page_ll(uint8_t *buf, uint16_t pageaddr);
 HAL_StatusTypeDef at45_read_page_dma(uint8_t *buf, uint16_t pageaddr);
 void HAL_SPI_RxCpltCallback_SPI2();

@@ -35,6 +35,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include <string.h>
 #include "ff_gen_drv.h"
+#include "AT45DB161D.h"
 
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
@@ -81,7 +82,7 @@ DSTATUS USER_initialize (
 )
 {
   /* USER CODE BEGIN INIT */
-    Stat = STA_NOINIT;
+    Stat = 0;
     return Stat;
   /* USER CODE END INIT */
 }
@@ -96,7 +97,7 @@ DSTATUS USER_status (
 )
 {
   /* USER CODE BEGIN STATUS */
-    Stat = STA_NOINIT;
+    //Stat = STA_NOINIT;
     return Stat;
   /* USER CODE END STATUS */
 }
@@ -117,7 +118,15 @@ DRESULT USER_read (
 )
 {
   /* USER CODE BEGIN READ */
-    return RES_OK;
+	if (pdrv != 0)
+		return RES_PARERR;
+	for (int i = 0; i< count; i++)
+	{
+		at45_read_page_dma(buff, sector+i);
+		buff += 512;
+	}
+	return RES_OK;
+
   /* USER CODE END READ */
 }
 
@@ -139,7 +148,14 @@ DRESULT USER_write (
 {
   /* USER CODE BEGIN WRITE */
   /* USER CODE HERE */
-    return RES_OK;
+	if (pdrv != 0)
+		return RES_PARERR;
+	for (int i = 0; i< count; i++)
+	{
+		at45_write_page((uint8_t*) buff, sector+i);
+		buff += 512;
+	}
+	return RES_OK;
   /* USER CODE END WRITE */
 }
 #endif /* _USE_WRITE == 1 */
@@ -159,8 +175,18 @@ DRESULT USER_ioctl (
 )
 {
   /* USER CODE BEGIN IOCTL */
-    DRESULT res = RES_ERROR;
-    return res;
+//    DRESULT res = RES_ERROR;
+//    return res;
+
+	switch (cmd)
+	{
+		case CTRL_SYNC:
+			return RES_OK;   /* geen cache; at45_write_page is al synchroon */
+		default:
+			return RES_PARERR;
+	}
+
+
   /* USER CODE END IOCTL */
 }
 #endif /* _USE_IOCTL == 1 */

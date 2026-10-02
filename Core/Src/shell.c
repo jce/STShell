@@ -16,6 +16,8 @@
 #include "pwm.h"
 #include "AT45DB161D.h"
 #include "AT45_bench.h"
+#include "ff.h"
+#include "fatfs.h"
 //======================================================================
 // Line editor logic
 
@@ -34,6 +36,15 @@ bool new_command = true;		// True if the command to be typed is new.
 void shell_tx_str(const char *p)
 {
 	while (*p)
+	{
+		shell_tx(*p);
+		p++;
+	}
+}
+
+void shell_tx_str_len(const char *p, unsigned int len)
+{
+	while (len--)
 	{
 		shell_tx(*p);
 		p++;
@@ -227,6 +238,7 @@ CMD(pwm,		s_pwm, 		"[0 1 2 3 4 5 6 7] Sets the pwm intensity of onboard leds. [o
 CMD(at45,		s_at45,		"[read/write] [page] [content] test AT45 connection.") \
 CMD(bench,		s_bench,	"[read/readll/readdma/write] [n] benchmark AT45 flash.") \
 CMD(spi2baud,	s_spi2baud,	"prints SPI2 baudrate.") \
+CMD(fat,		s_fat,		"[cmd] runs a fat command") \
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
@@ -1002,4 +1014,175 @@ void s_spi2baud(int argc, char **argv)
 	shell_tx_str(buf);
 }
 
+char *FRESULT_STR[20] = {
+"FR_OK",				/* (0) Succeeded */
+"FR_DISK_ERR",			/* (1) A hard error occurred in the low level disk I/O layer */
+"FR_INT_ERR",				/* (2) Assertion failed */
+"FR_NOT_READY",			/* (3) The physical drive cannot work */
+"FR_NO_FILE",				/* (4) Could not find the file */
+"FR_NO_PATH",				/* (5) Could not find the path */
+"FR_INVALID_NAME",		/* (6) The path name format is invalid */
+"FR_DENIED",				/* (7) Access denied due to prohibited access or directory full */
+"FR_EXIST",				/* (8) Access denied due to prohibited access */
+"FR_INVALID_OBJECT",		/* (9) The file/directory object is invalid */
+"FR_WRITE_PROTECTED",		/* (10) The physical drive is write protected */
+"FR_INVALID_DRIVE",		/* (11) The logical drive number is invalid */
+"FR_NOT_ENABLED",			/* (12) The volume has no work area */
+"FR_NO_FILESYSTEM",		/* (13) There is no valid FAT volume */
+"FR_MKFS_ABORTED",		/* (14) The f_mkfs() aborted due to any parameter error */
+"FR_TIMEOUT",				/* (15) Could not get a grant to access the volume within defined period */
+"FR_LOCKED",				/* (16) The operation is rejected according to the file sharing policy */
+"FR_NOT_ENOUGH_CORE",		/* (17) LFN working buffer could not be allocated */
+"FR_TOO_MANY_OPEN_FILES",	/* (18) Number of open files > _FS_SHARE */
+"FR_INVALID_PARAMETER" };	/* (19) Given parameter is invalid */
+
+#define TX_RV_RET \
+		{\
+			if (rv != FR_OK) \
+			{ \
+				sprintf(buf, "%d: %s\r\n", rv, FRESULT_STR[rv]); \
+				shell_tx_str(buf); \
+			} \
+			return; \
+		}
+
+void s_fat(int argc, char **argv)
+{
+	static DIR* dp = NULL;
+	static FILINFO* fno = NULL;
+	#define BUFLEN 64
+	char buf[BUFLEN], buf2[BUFLEN];
+	FRESULT rv;
+	if (argc >= 2 && strcmp(argv[1], "readdir") == 0)
+	{
+		rv = f_readdir(dp, fno);
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "opendir") == 0)
+	{
+		rv = f_opendir(dp, argv[2]);
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "getlabel") == 0)
+	{
+		DWORD vsn = 0;
+		rv = f_getlabel(argv[2], buf, &vsn);
+		shell_tx_str(buf);
+		shell_tx_str("\r\n");
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "setlabel") == 0)
+	{
+		rv = f_setlabel(argv[2]);
+		shell_tx_str(buf);
+		TX_RV_RET;
+	}
+	if (argc >= 2 && strcmp(argv[1], "pwd") == 0)
+	{
+		rv = f_getcwd(buf, BUFLEN);
+		shell_tx_str(buf);
+		shell_tx_str("\r\n");
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "mount") == 0)
+	{
+		rv = f_mount(&USERFatFS, argv[2], 0);
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "free") == 0)
+	{
+		DWORD nclst = 0;
+		FATFS *fatp = NULL;
+		rv = f_getfree(argv[2], &nclst, &fatp);
+		if (rv == FR_OK)
+		{
+			sprintf(buf, "Free: %ld clusters, %ld bytes.\r\n", nclst, nclst * fatp->csize  * 512);
+			shell_tx_str(buf);
+		}
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "cd") == 0)
+	{
+		rv = f_chdir(argv[2]);
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "stat") == 0)
+	{
+		FILINFO fno = {0};
+		rv = f_stat(argv[2], &fno);
+		if (rv == FR_OK)
+		{
+			sprintf(buf, "fsize: %ld\r\n", fno.fsize); shell_tx_str(buf);
+			sprintf(buf, "fdate: %d\r\n", fno.fdate); shell_tx_str(buf);
+			sprintf(buf, "ftime: %d\r\n", fno.ftime); shell_tx_str(buf);
+			sprintf(buf, "fattrib: %d\r\n", fno.fattrib); shell_tx_str(buf);
+			sprintf(buf, "fname: %s\r\n", fno.fname); shell_tx_str(buf);
+			if (fno.lfname)
+			{
+				sprintf(buf, "lfname: %s\r\n", fno.lfname); shell_tx_str(buf);
+				sprintf(buf, "lfsize: %d\r\n", fno.lfsize); shell_tx_str(buf);
+			}
+		}
+		TX_RV_RET;
+	}
+	if (argc >= 2 && strcmp(argv[1], "dir") == 0)
+	{
+		char *dirstr;
+		if (argc == 2)
+			dirstr = ".";
+		else
+			dirstr = argv[2];
+		DIR dp = {0};
+		FILINFO fno = {0};
+		FRESULT rv;
+		rv = f_opendir(&dp, dirstr);
+		if (rv != FR_OK)
+			TX_RV_RET;
+		while(1)
+		{
+			fno.lfname = buf2;
+			fno.lfsize = BUFLEN;
+			rv = f_readdir(&dp, &fno);
+			if (rv != FR_OK || fno.fname[0] == 0)
+				break;
+			if (fno.lfname[0] != 0)
+				sprintf(buf, "%8lu %s\r\n", fno.fsize, fno.lfname);
+			else
+				sprintf(buf, "%8lu %s\r\n", fno.fsize, fno.fname);
+			shell_tx_str(buf);
+		}
+		rv = f_closedir(&dp);
+		if (rv != FR_OK)
+			TX_RV_RET;
+
+		DWORD nclst = 0;
+		FATFS *fatp = NULL;
+		rv = f_getfree(dirstr, &nclst, &fatp);
+		if (rv == FR_OK)
+		{
+			sprintf(buf, "%8ld free\r\n", nclst * fatp->csize  * 512);
+			shell_tx_str(buf);
+		}
+
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "cat") == 0)
+	{
+		FIL fno = {0};
+		FRESULT rv;
+		UINT br;
+		rv = f_open(&fno, argv[2], FA_READ);
+		if (rv != FR_OK)
+			TX_RV_RET;
+		while(1)
+		{
+			rv = f_read(&fno, buf, BUFLEN, &br);
+			if ((rv != FR_OK) || (br == 0))
+				break;
+			shell_tx_str_len(buf, br);
+		}
+		TX_RV_RET;
+	}
+	shell_tx_str("Commands: opendir [path], readdir, getlabel [path], setlabel [label], pwd, free [drive], stat [file], dir [uri].\r\n");
+}
 

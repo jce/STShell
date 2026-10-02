@@ -81,7 +81,7 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t STShellHandle;
 const osThreadAttr_t STShell_attributes = {
   .name = "STShell",
-  .stack_size = 512 * 4,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for PWM */
