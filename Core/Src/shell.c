@@ -1,3 +1,4 @@
+#include <AT45.h>
 #include <stdio.h>	// sprintf
 #include "stdbool.h"
 #include "stm32f3xx_hal.h"	// Fixes uint8_t being unknown.
@@ -14,7 +15,6 @@
 #include "queue.h"
 #include "task.h"
 #include "pwm.h"
-#include "AT45DB161D.h"
 #include "AT45_bench.h"
 #include "ff.h"
 #include "fatfs.h"

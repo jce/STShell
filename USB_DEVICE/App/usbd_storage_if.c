@@ -19,13 +19,13 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
+#include <AT45.h>
 #include "usbd_storage_if.h"
 
 /* USER CODE BEGIN INCLUDE */
 
 #include "flash_counter.h"
 #include "pwm.h"
-#include "AT45DB161D.h"
 
 /* USER CODE END INCLUDE */
 

@@ -17,6 +17,7 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <AT45.h>
 #include "main.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
@@ -32,7 +33,6 @@
 #include "queue.h"
 #include "I3G4250D.h"
 #include "pwm.h"
-#include "AT45DB161D.h"
 
 /* USER CODE END Includes */
 

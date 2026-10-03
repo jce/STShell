@@ -11,11 +11,11 @@
  * zodat korte runs niet op ms-resolutie afknappen.
  */
 
+#include <AT45.h>
 #include "main.h"
 #include "AT45_bench.h"
 #include <stdio.h>
 #include "shell.h"
-#include "AT45DB161D.h"
 #include <string.h>
 
 void bench_delay_init(void)

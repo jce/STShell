@@ -5,8 +5,8 @@
  *      Author: jeindhoven
  */
 
-#ifndef INC_AT45DB161D_H_
-#define INC_AT45DB161D_H_
+#ifndef INC_AT45_H_
+#define INC_AT45_H_
 
 #include <stdint.h>
 #include "stm32f3xx_hal.h"
@@ -78,4 +78,20 @@ void HAL_SPI_RxCpltCallback_SPI2();
 #define AT_RESERVED_PAGES 							256
 #define AT_PAGE_SIZE								512
 
-#endif /* INC_AT45DB161D_H_ */
+// Wear counter system
+// These look like variables, but records should be aligned to pages, which severely
+// restrict the choices!
+#define TALLY_BYTES									5
+#define TALLY_NUM									(TALLY_BYTES * 8)
+#define RECORD_LENGTH								(3+TALLY_BYTES)
+#define RECORDS_PER_PAGE							(AT_PAGE_SIZE / RECORD_LENGTH)
+#define PAGES_FOR_ALL_RECORDS						(AT_NUM_PAGES / RECORDS_PER_PAGE)
+#define WC_FIRST_PAGE								(AT_NUM_PAGES - PAGES_FOR_ALL_RECORDS)
+
+void count_page_erase(uint32_t page);				// Counts one to the page counter of given page.
+void consolidate_records_page(uint32_t, uint32_t);	// Consolidates a block of records.
+													//(page number of the block of records)
+
+
+
+#endif /* INC_AT45_H_ */
