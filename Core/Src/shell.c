@@ -1014,7 +1014,7 @@ void s_spi2baud(int argc, char **argv)
 	shell_tx_str(buf);
 }
 
-char *FRESULT_STR[20] = {
+const char *FRESULT_STR[20] = {
 "FR_OK",				/* (0) Succeeded */
 "FR_DISK_ERR",			/* (1) A hard error occurred in the low level disk I/O layer */
 "FR_INT_ERR",				/* (2) Assertion failed */
@@ -1048,21 +1048,10 @@ char *FRESULT_STR[20] = {
 
 void s_fat(int argc, char **argv)
 {
-	static DIR* dp = NULL;
-	static FILINFO* fno = NULL;
 	#define BUFLEN 64
 	char buf[BUFLEN], buf2[BUFLEN];
 	FRESULT rv;
-	if (argc >= 2 && strcmp(argv[1], "readdir") == 0)
-	{
-		rv = f_readdir(dp, fno);
-		TX_RV_RET;
-	}
-	if (argc >= 3 && strcmp(argv[1], "opendir") == 0)
-	{
-		rv = f_opendir(dp, argv[2]);
-		TX_RV_RET;
-	}
+
 	if (argc >= 3 && strcmp(argv[1], "getlabel") == 0)
 	{
 		DWORD vsn = 0;
@@ -1074,7 +1063,6 @@ void s_fat(int argc, char **argv)
 	if (argc >= 3 && strcmp(argv[1], "setlabel") == 0)
 	{
 		rv = f_setlabel(argv[2]);
-		shell_tx_str(buf);
 		TX_RV_RET;
 	}
 	if (argc >= 2 && strcmp(argv[1], "pwd") == 0)
@@ -1087,6 +1075,11 @@ void s_fat(int argc, char **argv)
 	if (argc >= 3 && strcmp(argv[1], "mount") == 0)
 	{
 		rv = f_mount(&USERFatFS, argv[2], 0);
+		TX_RV_RET;
+	}
+	if (argc >= 3 && strcmp(argv[1], "unmount") == 0)
+	{
+		rv = f_mount(0, argv[2], 0);
 		TX_RV_RET;
 	}
 	if (argc >= 3 && strcmp(argv[1], "free") == 0)
@@ -1145,10 +1138,24 @@ void s_fat(int argc, char **argv)
 			rv = f_readdir(&dp, &fno);
 			if (rv != FR_OK || fno.fname[0] == 0)
 				break;
-			if (fno.lfname[0] != 0)
-				sprintf(buf, "%8lu %s\r\n", fno.fsize, fno.lfname);
+			char dts[17];
+			if (fno.fdate == 0)
+				 strcpy(dts, "                ");
 			else
-				sprintf(buf, "%8lu %s\r\n", fno.fsize, fno.fname);
+			{
+				int y = ((fno.fdate >> 9) & 0x7F) + 1980;
+				int m = (fno.fdate >> 5) & 0x0F;
+				int d = fno.fdate & 0x1F;
+				int h = (fno.ftime >> 11) & 0x1F;
+				int mi = (fno.ftime >> 5) & 0x3F;
+				snprintf(dts, sizeof(dts), "%04d-%02d-%02d %02d:%02d", y, m, d, h, mi);
+			}
+			const char* name = (fno.lfname[0] ? fno.lfname : fno.fname);
+			if (fno.fattrib & AM_DIR)
+				sprintf(buf, "   <DIR> %-16s %s\r\n", dts, name);
+			else
+				sprintf(buf, "%8lu %-16s %s\r\n", fno.fsize, dts, name);
+
 			shell_tx_str(buf);
 		}
 		rv = f_closedir(&dp);
@@ -1181,8 +1188,46 @@ void s_fat(int argc, char **argv)
 				break;
 			shell_tx_str_len(buf, br);
 		}
+		f_close(&fno);
 		TX_RV_RET;
 	}
-	shell_tx_str("Commands: opendir [path], readdir, getlabel [path], setlabel [label], pwd, free [drive], stat [file], dir [uri].\r\n");
+	if (argc >= 3 && strcmp(argv[1], "touch") == 0)
+	{
+		FIL fil;
+		FRESULT rv = f_open(&fil, argv[2], FA_OPEN_ALWAYS | FA_WRITE);
+		TX_RV_RET;
+		f_close(&fil);
+		TX_RV_RET;
+	}
+	if (argc >= 3 && ((strcmp(argv[1], "del") == 0) || (strcmp(argv[1], "rm") == 0) ))
+	{
+		FRESULT rv = f_unlink(argv[2]);
+		TX_RV_RET;
+	}
+	if (argc >= 3 && ((strcmp(argv[1], "mkdir") == 0) || (strcmp(argv[1], "md") == 0)) )
+	{
+		FRESULT rv = f_mkdir(argv[2]);
+		TX_RV_RET;
+	}
+	if (argc >= 4 && strcmp(argv[1], "write") == 0)
+	{
+		GLUE_ARGUMENTS(3, argc);
+		FIL fil;
+		UINT bw;
+		FRESULT rv = f_open(&fil, argv[2], FA_WRITE | FA_OPEN_ALWAYS);
+		if (rv != FR_OK)
+			TX_RV_RET
+		f_lseek(&fil, f_size(&fil));
+		f_write(&fil, argv[3], strlen(argv[3]), &bw);
+		f_write(&fil, "\r\n", 2, &bw);
+		f_close(&fil);
+		return;
+	}
+	if (argc == 1)
+	{
+		shell_tx_str("Commands: mount, unmount, getlabel, setlabel [label], pwd, free [drive], stat [file], dir [uri], touch [file], del/rm [file], mkdir/md [name], write [name] [text to write].\r\n");
+		return;
+	}
+	shell_tx_str("Unknown command.\r\n");
 }
 
