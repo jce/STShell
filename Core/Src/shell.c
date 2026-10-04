@@ -235,7 +235,6 @@ CMD(motd,		s_motd,		"[motd text] Sets or recalls the MOTD.") \
 CMD(bootcount,	s_bootcount,"Recalls the bootcount.") \
 CMD(time,		s_time,		"[YYYY MM DD hh mm ss] Recalls or sets time.") \
 CMD(pwm,		s_pwm, 		"[0 1 2 3 4 5 6 7] Sets the pwm intensity of onboard leds. [off], [compass], [rodo], or [usb].") \
-CMD(at45,		s_at45,		"[read/write] [page] [content] test AT45 connection.") \
 CMD(bench,		s_bench,	"[read/readll/readdma/write] [n] benchmark AT45 flash.") \
 CMD(spi2baud,	s_spi2baud,	"prints SPI2 baudrate.") \
 CMD(fat,		s_fat,		"[cmd] runs a fat command") \
@@ -965,36 +964,6 @@ void s_pwm(int argc, char **argv)
 	for (char* i = argv[STARTARG]; i < argv[ARGC-1]; i++) \
 		if (*i == 0) \
 			*i = ' ';
-
-void s_at45(int argc, char **argv)
-{
-	uint32_t page;
-	if (argc >= 3 && strcmp(argv[1], "write") == 0 && sscanf(argv[2], "%lu", &page) == 1)
-	{
-		GLUE_ARGUMENTS(3, argc);
-		uint8_t buf[512];
-		sprintf((char*) buf, "%s", argv[3]);
-		at45_write_page(buf, page);
-		shell_tx_str("Done\r\n");
-		return;
-	}
-	if (argc == 3 && strcmp(argv[1], "read") == 0 && sscanf(argv[2], "%lu", &page) == 1)
-	{
-		uint8_t buf[512];
-		at45_read_page(buf, page);
-		shell_tx_str((char*) buf);
-		shell_tx_str("\r\nDone\r\n");
-		return;
-	}
-	if (argc == 1)
-	{
-	    char buf[16];
-	    sprintf(buf, "%d\r\n", at45_status());
-	    shell_tx_str(buf);
-	    return;
-	}
-	shell_tx_str("Usage: [read/write] [page] [content]\r\n");
-}
 
 void s_spi2baud(int argc, char **argv)
 {

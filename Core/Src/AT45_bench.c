@@ -111,7 +111,7 @@ static void bench_write(uint32_t pages, uint8_t *buf)
     bench_delay_init();
     uint32_t t0 = bench_ticks();
     for (uint32_t p = 0; p < pages; p++)
-        if (at45_write_page(buf, 0x3d00 + p) != HAL_OK)  // testzone, niet p.0!
+        if (at45_write_page(buf, 0xF00 + p) != HAL_OK)  // testzone, niet p.0!
             errors++;
     uint32_t t1 = bench_ticks();
     bench_report("write", t1 - t0, pages, errors);

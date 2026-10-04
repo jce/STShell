@@ -19,6 +19,9 @@
 #define SPI2_CS_LOW  HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_RESET);
 #define SPI2_CS_HIGH HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
 
+//#define DBG(...) do {printf(__VA_ARGS__); printf("\r\n");} while (0)
+#define DBG(...)
+
 HAL_StatusTypeDef at45_read_page(uint8_t *buf, uint16_t pageaddr)
 {
 	HAL_StatusTypeDef rv;
@@ -70,6 +73,7 @@ void HAL_SPI_RxCpltCallback_SPI2()
 
 HAL_StatusTypeDef at45_read_page_dma(uint8_t *buf, uint16_t pageaddr)
 {
+	DBG("Reading page %u", pageaddr);
     uint8_t txdata[8] = {0};
     txdata[0] = Main_Memory_Page_Read;
     txdata[1] = pageaddr >> 6;
@@ -114,6 +118,7 @@ HAL_StatusTypeDef at45_ready_wait(void)
 
 HAL_StatusTypeDef at45_write_page(uint8_t *buf, uint16_t pageaddr)
 {
+	DBG("Writing page %u", pageaddr);
 	HAL_StatusTypeDef rv;
 	uint8_t txdata[4] = {0};
 	txdata[0] = Buffer_1_Write;
@@ -180,6 +185,7 @@ void increment_tally(uint8_t *record)
 	uint8_t tallybyte = 3+tally/8;
 	uint8_t tallybit = tally%8;
 	record[tallybyte] &= ~(1 << tallybit);
+	DBG("Tally changed to %02X%02X%02X%02X%02X", record[3], record[4], record[5], record[6], record[7]);
 }
 
 void copy_tally_page_to_ram_buffer_1(uint32_t tally_page)
@@ -197,20 +203,23 @@ void copy_tally_page_to_ram_buffer_1(uint32_t tally_page)
 
 void get_record_from_ram_buffer_1(uint32_t record_in_page, uint8_t *record)
 {
-	uint8_t txdata[4];
+	uint8_t txdata[5];
 	uint32_t offset_in_page = record_in_page * RECORD_LENGTH;
 	txdata[0] = Buffer_1_Read;
 	txdata[1] = 0xff;
 	txdata[2] = 0b11111100 | (offset_in_page >> 8);
 	txdata[3] = offset_in_page & 0x000000ff;
+	txdata[4] = 0xff;	// High speed read requires additional don't care byte.
     SPI2_CS_LOW;
-    HAL_SPI_Transmit(&hspi2, txdata, 4, SPI2_TIMEOUT);
+    HAL_SPI_Transmit(&hspi2, txdata, 5, SPI2_TIMEOUT);
     HAL_SPI_Receive (&hspi2, record, 8, SPI2_TIMEOUT);
     SPI2_CS_HIGH;
+	DBG("Received from ram buffer 1: %02X%02X%02X%02X%02X", record[3], record[4], record[5], record[6], record[7]);
 }
 
 void write_record_to_ram_buffer_1(uint32_t record_in_page, uint8_t *record)
 {
+	DBG("Writing to ram buffer 1: %02X%02X%02X%02X%02X", record[3], record[4], record[5], record[6], record[7]);
 	uint8_t txdata[4];
 	uint32_t offset_in_page = record_in_page * RECORD_LENGTH;
 	txdata[0] = Buffer_1_Write;
@@ -251,6 +260,8 @@ void copy_ram_buffer_1_to_tally_page(uint32_t tally_page)
 
 void count_page_erase(uint32_t page)
 {
+	DBG("Counting erase for page %lu", page);
+
 	uint32_t tally_page = page / RECORDS_PER_PAGE + WC_FIRST_PAGE;
 	uint32_t record_in_page = page % RECORDS_PER_PAGE;
 	uint8_t record[8];
@@ -262,6 +273,7 @@ void count_page_erase(uint32_t page)
 
 	// Increment tally
 	uint32_t tally = get_tally_count(record);
+	DBG("Reading tally from page %lu record %lu: %lu", tally_page, record_in_page, tally);
 	if (tally >= TALLY_NUM)
 	{
 		// we need to consolidate!
@@ -284,6 +296,7 @@ void count_page_erase(uint32_t page)
 
 void consolidate_records_page(uint32_t pagenr, uint32_t record_in_page)
 {
+	DBG("Consolidating page %lu, tallying record %lu", pagenr, record_in_page);
 	// Get the whole page
 	static uint8_t page[512];
 	at45_read_page_dma(page, pagenr);
@@ -374,6 +387,7 @@ HAL_StatusTypeDef at45_dump_pages(uint32_t first, uint32_t last)
 
 HAL_StatusTypeDef at45_erase_page(uint32_t pagenr)
 {
+	DBG("Ersasing page %lu", pagenr);
     uint8_t txdata[4] = {0};
     txdata[0] = Page_Erase;
     txdata[1] = pagenr >> 6;
