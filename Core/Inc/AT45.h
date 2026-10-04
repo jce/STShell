@@ -91,7 +91,7 @@ void HAL_SPI_RxCpltCallback_SPI2();
 void count_page_erase(uint32_t page);				// Counts one to the page counter of given page.
 void consolidate_records_page(uint32_t, uint32_t);	// Consolidates a block of records.
 													//(page number of the block of records)
-
+void s_at(int, char**);
 
 
 #endif /* INC_AT45_H_ */

@@ -9,8 +9,12 @@
 // per flashchip, and requires changing the addressing scheme. Only the first 512 bytes are
 // used now anyways.
 
+#include <stdio.h>
+
 #include <AT45.h>
 #include "main.h"
+#include "shell.h"
+#include <string.h>
 
 #define SPI2_CS_LOW  HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_RESET);
 #define SPI2_CS_HIGH HAL_GPIO_WritePin(SPI2_CS_GPIO_Port, SPI2_CS_Pin, GPIO_PIN_SET);
@@ -301,7 +305,136 @@ void consolidate_records_page(uint32_t pagenr, uint32_t record_in_page)
 	at45_write_page(page, pagenr);
 }
 
+// ==================================================================================================
+// Diagnostic functions
 
+void wear_dump()
+{
+	uint8_t page[512];
+	char buf[12];
+	for (int i = 0; i < PAGES_FOR_ALL_RECORDS; i++)
+	{
+		at45_read_page_dma(page, i+WC_FIRST_PAGE);
+		for (int j = 0; j < RECORDS_PER_PAGE; j++)
+		{
+			if (j % 16 == 0)
+			{
+				//sprintf(buf, "%04X: ", i * RECORDS_PER_PAGE + j);
+				sprintf(buf, "%04u: ", i * RECORDS_PER_PAGE + j);
+				shell_tx_str(buf);
+			}
+			uint32_t total = get_total_count(page + RECORD_LENGTH * j);
+			sprintf(buf, "%8lu ", total);
+			shell_tx_str(buf);
+			if (j % 16 == 15)
+				shell_tx_str("\r\n");
+		}
+	}
+}
+
+HAL_StatusTypeDef at45_dump_page(uint32_t pagenr)
+{
+    uint8_t page[512];
+    char buf[64];
+    HAL_StatusTypeDef rv = at45_read_page_dma(page, pagenr);
+
+    for (int row = 0; row < 512; row += 16)
+    {
+        sprintf(buf, "%03lX: ", pagenr * 512L + row);   /* byte-adres, of "%04lX: " paginanaam */
+        shell_tx_str(buf);
+        for (int col = 0; col < 16; col++)
+        {
+            sprintf(buf, "%02X ", page[row + col]);
+            shell_tx_str(buf);
+        }
+        /* ASCII-kolom: leesbaarheid bij strings/structs */
+        shell_tx_str(" |");
+        for (int col = 0; col < 16; col++)
+        {
+            uint8_t c = page[row + col];
+            buf[col] = (c >= 0x20 && c < 0x7F) ? c : '.';
+        }
+        buf[16] = 0;
+        shell_tx_str(buf);
+        shell_tx_str("|\r\n");
+    }
+    return rv;
+}
+
+HAL_StatusTypeDef at45_dump_pages(uint32_t first, uint32_t last)
+{
+    for (uint32_t p = first; p <= last; p++)
+    {
+        HAL_StatusTypeDef rv = at45_dump_page(p);
+        if (rv != HAL_OK)
+            return rv;
+    }
+    return HAL_OK;
+}
+
+HAL_StatusTypeDef at45_erase_page(uint32_t pagenr)
+{
+    uint8_t txdata[4] = {0};
+    txdata[0] = Page_Erase;
+    txdata[1] = pagenr >> 6;
+    txdata[2] = (pagenr & 0b00111111) << 2;
+    txdata[3] = 0xff;
+
+    SPI2_CS_LOW;
+    HAL_StatusTypeDef rv = HAL_SPI_Transmit(&hspi2, txdata, 4, SPI2_TIMEOUT);
+    SPI2_CS_HIGH;
+
+    if (rv == HAL_OK)
+        rv = at45_ready_wait();
+    if (rv == HAL_OK)
+        count_page_erase(pagenr);      // Count erases
+    return rv;
+}
+
+HAL_StatusTypeDef at45_erase_pages(uint32_t first, uint32_t last)
+{
+    for (uint32_t p = first; p <= last; p++)
+    {
+        HAL_StatusTypeDef rv = at45_erase_page(p);
+        if (rv != HAL_OK)
+            return rv;
+    }
+    return HAL_OK;
+}
+
+void s_at(int argc, char** argv)
+{
+	if ((argc >= 3) && strcmp(argv[1], "erase") == 0)
+	{
+		uint32_t from, to;
+		sscanf(argv[2], "%lu", &from);
+		if (argc >= 4)
+			sscanf(argv[3], "%lu", &to);
+		else
+			to = from;
+		at45_erase_pages(from, to);
+		return;
+	}
+
+	if ((argc >= 3) && strcmp(argv[1], "dump") == 0)
+	{
+		uint32_t from, to;
+		sscanf(argv[2], "%lu", &from);
+		if (argc >= 4)
+			sscanf(argv[3], "%lu", &to);
+		else
+			to = from;
+		at45_dump_pages(from, to);
+		return;
+	}
+
+	if ((argc >= 2) && strcmp(argv[1], "wear") == 0)
+	{
+		wear_dump();
+		return;
+	}
+	shell_tx_str("Commands: erase, dump, wear.\r\n");
+}
 
 
 

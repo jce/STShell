@@ -239,6 +239,7 @@ CMD(at45,		s_at45,		"[read/write] [page] [content] test AT45 connection.") \
 CMD(bench,		s_bench,	"[read/readll/readdma/write] [n] benchmark AT45 flash.") \
 CMD(spi2baud,	s_spi2baud,	"prints SPI2 baudrate.") \
 CMD(fat,		s_fat,		"[cmd] runs a fat command") \
+CMD(at,			s_at,		"[cmd] runs a at command") \
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
