@@ -17,7 +17,6 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include <AT45.h>
 #include "main.h"
 #include "cmsis_os.h"
 #include "fatfs.h"
@@ -33,6 +32,8 @@
 #include "queue.h"
 #include "I3G4250D.h"
 #include "pwm.h"
+#include "net.h"
+#include "AT45.h"
 
 /* USER CODE END Includes */
 
@@ -61,6 +62,7 @@ RTC_HandleTypeDef hrtc;
 
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
+SPI_HandleTypeDef hspi3;
 DMA_HandleTypeDef hdma_spi2_rx;
 DMA_HandleTypeDef hdma_spi2_tx;
 
@@ -123,6 +125,7 @@ static void MX_RTC_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_SPI2_Init(void);
+static void MX_SPI3_Init(void);
 void StartDefaultTask(void *argument);
 void StartSTShell(void *argument);
 void startPWM(void *argument);
@@ -178,6 +181,7 @@ int main(void)
   MX_TIM4_Init();
   MX_SPI2_Init();
   MX_FATFS_Init();
+  MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
 
   stack_paint();
@@ -194,7 +198,7 @@ int main(void)
 		boot = *bootp;
 	boot++;
 	nvstore(NV_BOOTCOUNT, 4, &boot);
-
+	net_init();
 
   /* USER CODE END 2 */
 
@@ -720,6 +724,46 @@ static void MX_SPI2_Init(void)
   /* USER CODE BEGIN SPI2_Init 2 */
 
   /* USER CODE END SPI2_Init 2 */
+
+}
+
+/**
+  * @brief SPI3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI3_Init(void)
+{
+
+  /* USER CODE BEGIN SPI3_Init 0 */
+
+  /* USER CODE END SPI3_Init 0 */
+
+  /* USER CODE BEGIN SPI3_Init 1 */
+
+  /* USER CODE END SPI3_Init 1 */
+  /* SPI3 parameter configuration*/
+  hspi3.Instance = SPI3;
+  hspi3.Init.Mode = SPI_MODE_MASTER;
+  hspi3.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi3.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi3.Init.NSS = SPI_NSS_SOFT;
+  hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi3.Init.CRCPolynomial = 7;
+  hspi3.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi3.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  if (HAL_SPI_Init(&hspi3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI3_Init 2 */
+
+  /* USER CODE END SPI3_Init 2 */
 
 }
 

@@ -17,6 +17,10 @@ typedef enum nvstore_desc_e {
 	NV_BOOTCOUNT = 0x02,
 	NV_LSM303AGR_MAGCAL = 0x03,
 	NV_PWMMODE = 0x04,
+	NV_NET_IP = 0x05,
+	NV_NET_GW = 0x06,
+	NV_NET_MASK = 0x07,
+	NV_NET_MAC = 0x08,
 	NV_UNUSED = 0xFF
 } nvstore_desc;
 

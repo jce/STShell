@@ -9,7 +9,7 @@
 #define INC_SHELL_H_
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.5.0"
+#define SHELL_VER "0.5.1"
 
 void shell_task();			// For the RTOS
 void shell_rx(uint8_t);	// Receive a character. Whole processing hangs on this one function
@@ -18,6 +18,8 @@ void shell_rx(uint8_t);	// Receive a character. Whole processing hangs on this o
 void shell_tx(char);
 
 void shell_tx_str(const char*);
+#define SHELL_PRINTF_BUFLEN	128
+int shell_printf(const char*, ...);
 void dispatch();
 
 // Temporary, for a test

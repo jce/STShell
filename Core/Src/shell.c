@@ -3,6 +3,7 @@
 #include "stdbool.h"
 #include "stm32f3xx_hal.h"	// Fixes uint8_t being unknown.
 #include <string.h>	// strlen, strcmp
+#include <stdarg.h>
 
 #include "flash_counter.h"
 #include "LSM303AGR.h"
@@ -18,6 +19,7 @@
 #include "AT45_bench.h"
 #include "ff.h"
 #include "fatfs.h"
+#include "net.h"
 //======================================================================
 // Line editor logic
 
@@ -49,6 +51,29 @@ void shell_tx_str_len(const char *p, unsigned int len)
 		shell_tx(*p);
 		p++;
 	}
+}
+
+
+int shell_printf(const char *fmt, ...)
+{
+	char buf[SHELL_PRINTF_BUFLEN];
+	va_list ap;
+	int n;
+
+	va_start(ap, fmt);
+	n = vsnprintf(buf, SHELL_PRINTF_BUFLEN, fmt, ap);
+	va_end(ap);
+
+	if (n<0)
+		return n;
+	if (n >= SHELL_PRINTF_BUFLEN)
+	{
+		shell_tx_str(buf);			// Send what we have.
+		shell_tx_str("...");		// Visualize that something is missing.
+		return n;
+	}
+	shell_tx_str(buf);
+	return n;
 }
 
 void move_line_right(char c)	// For inserting characters at cbpos and moving the remainder of the line right.
@@ -239,6 +264,7 @@ CMD(bench,		s_bench,	"[read/readll/readdma/write] [n] benchmark AT45 flash.") \
 CMD(spi2baud,	s_spi2baud,	"prints SPI2 baudrate.") \
 CMD(fat,		s_fat,		"[cmd] runs a fat command") \
 CMD(at,			s_at,		"[cmd] runs a at command") \
+CMD(net,		s_net,		"[cmd] runs a net command") \
 // Types
 typedef void (*cmd_func_t)(int argc, char **argv);
 typedef struct
