@@ -1213,13 +1213,15 @@ void StartSTShell(void *argument)
 {
   /* USER CODE BEGIN StartSTShell */
   /* Infinite loop */
+	shell_ctx[0].tx = shell_tx_uart1;
+	shell_ctx[0].rx = shell_rx_uart1;
 	HAL_UART_RxCpltCallback(&huart1);			// Arm the interrupt chain once.
 
 	char* motd = (char*) nvfind(NV_MOTD);
 	if (motd)
 	{
-		shell_tx_str(motd);
-		shell_tx_str("\r\n");
+		shell_tx_str(&shell_ctx[0], motd);
+		shell_tx_str(&shell_ctx[0], "\r\n");
 	}
 
   for(;;)

@@ -31,7 +31,7 @@ uint32_t bench_ticks(void)
     return DWT->CYCCNT;
 }
 
-static void bench_report(const char *what, uint32_t cycles,
+static void bench_report(shell_ctx_t *ctx, const char *what, uint32_t cycles,
         uint32_t pages, uint32_t errors)
 {
     // ms met 0.1 resolutie: cycles * 1000 / (SystemCoreClock/1000)
@@ -53,10 +53,10 @@ static void bench_report(const char *what, uint32_t cycles,
                 what, pages, kbytes, ms10 / 10000,
                 (ms10 / 1000) % 10, kbps);
     }
-    shell_tx_str(buf);
+    shell_tx_str(ctx, buf);
 }
 
-static void bench_read(uint32_t pages, uint8_t *buf)
+static void bench_read(shell_ctx_t *ctx, uint32_t pages, uint8_t *buf)
 {
     uint32_t errors = 0;
     bench_delay_init();
@@ -68,10 +68,10 @@ static void bench_read(uint32_t pages, uint8_t *buf)
     // voorkomen dat de compiler de read weg-optimaliseert
     volatile uint8_t sink = buf[0] ^ buf[511];
     (void) sink;
-    bench_report("read", t1 - t0, pages, errors);
+    bench_report(ctx, "read", t1 - t0, pages, errors);
 }
 
-static void bench_read_ll(uint32_t pages, uint8_t *buf)
+static void bench_read_ll(shell_ctx_t *ctx, uint32_t pages, uint8_t *buf)
 {
     uint32_t errors = 0;
     bench_delay_init();
@@ -83,10 +83,10 @@ static void bench_read_ll(uint32_t pages, uint8_t *buf)
     // voorkomen dat de compiler de read weg-optimaliseert
     volatile uint8_t sink = buf[0] ^ buf[511];
     (void) sink;
-    bench_report("readll", t1 - t0, pages, errors);
+    bench_report(ctx, "readll", t1 - t0, pages, errors);
 }
 
-static void bench_read_dma(uint32_t pages, uint8_t *buf)
+static void bench_read_dma(shell_ctx_t *ctx, uint32_t pages, uint8_t *buf)
 {
     uint32_t errors = 0;
     bench_delay_init();
@@ -98,10 +98,10 @@ static void bench_read_dma(uint32_t pages, uint8_t *buf)
     // voorkomen dat de compiler de read weg-optimaliseert
     volatile uint8_t sink = buf[0] ^ buf[511];
     (void) sink;
-    bench_report("readdma", t1 - t0, pages, errors);
+    bench_report(ctx, "readdma", t1 - t0, pages, errors);
 }
 
-static void bench_write(uint32_t pages, uint8_t *buf)
+static void bench_write(shell_ctx_t *ctx, uint32_t pages, uint8_t *buf)
 {
     uint32_t errors = 0;
     // vul buf met iets herkenbaars, niet 0-en
@@ -114,37 +114,37 @@ static void bench_write(uint32_t pages, uint8_t *buf)
         if (at45_write_page(buf, 0xF00 + p) != HAL_OK)  // testzone, niet p.0!
             errors++;
     uint32_t t1 = bench_ticks();
-    bench_report("write", t1 - t0, pages, errors);
+    bench_report(ctx, "write", t1 - t0, pages, errors);
 }
 
-void s_bench(int argc, char **argv)
+void s_bench(shell_ctx_t *ctx, int argc, char **argv)
 {
     static uint8_t buf[512];   // static: niet op de stack
     uint32_t n;
 
     if (argc >= 3 && strcmp(argv[1], "read") == 0
             && sscanf(argv[2], "%lu", &n) == 1)
-        bench_read(n, buf);
+        bench_read(ctx, n, buf);
     if (argc >= 3 && strcmp(argv[1], "readll") == 0
             && sscanf(argv[2], "%lu", &n) == 1)
-        bench_read_ll(n, buf);
+        bench_read_ll(ctx, n, buf);
     if (argc >= 3 && strcmp(argv[1], "readdma") == 0
             && sscanf(argv[2], "%lu", &n) == 1)
-        bench_read_dma(n, buf);
+        bench_read_dma(ctx, n, buf);
     else if (argc >= 3 && strcmp(argv[1], "write") == 0
             && sscanf(argv[2], "%lu", &n) == 1)
-        bench_write(n, buf);
+        bench_write(ctx, n, buf);
     else if (argc == 1)
     {
-        shell_tx_str("read:\r\n");
-        bench_read(256, buf);      // 128 kB
-        shell_tx_str("read:\r\n");
-        bench_read_ll(256, buf);      // 128 kB
-        shell_tx_str("read:\r\n");
-        bench_read_dma(256, buf);      // 128 kB
-        shell_tx_str("write:\r\n");
-        bench_write(16, buf);      // 16 pagina's is al genoeg voor erase-timing
+        shell_tx_str(ctx, "read:\r\n");
+        bench_read(ctx, 256, buf);      // 128 kB
+        shell_tx_str(ctx, "read:\r\n");
+        bench_read_ll(ctx, 256, buf);      // 128 kB
+        shell_tx_str(ctx, "read:\r\n");
+        bench_read_dma(ctx, 256, buf);      // 128 kB
+        shell_tx_str(ctx, "write:\r\n");
+        bench_write(ctx, 16, buf);      // 16 pagina's is al genoeg voor erase-timing
     }
     else
-        shell_tx_str("Usage: bench [read/readll/readdma/write] [pages]\r\n");
+        shell_tx_str(ctx, "Usage: bench [read/readll/readdma/write] [pages]\r\n");
 }

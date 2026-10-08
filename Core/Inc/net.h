@@ -8,7 +8,9 @@
 #ifndef INC_NET_H_
 #define INC_NET_H_
 
-void s_net(int argc, char **argv);
+#include "shell.h"
+
+void s_net(shell_ctx_t *ctx, int argc, char **argv);
 void net_init(void);
 
 

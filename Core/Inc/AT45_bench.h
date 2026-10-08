@@ -6,6 +6,6 @@
  */
 
 
-void s_bench(int argc, char **argv);
+void s_bench(shell_ctx_t *ctx, int argc, char **argv);
 void bench_delay_init(void);
 uint32_t bench_ticks(void);

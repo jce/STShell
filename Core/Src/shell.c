@@ -20,41 +20,59 @@
 #include "ff.h"
 #include "fatfs.h"
 #include "net.h"
-//======================================================================
-// Line editor logic
 
+// Input and output system.
+shell_ctx_t shell_ctx[NUM_SHELL];
 
-void shell_tx(char c)
+// Returns bytes sent
+int shell_tx_uart1(void*, const char *c, size_t len)
 {
-	xQueueSend(STShell_TXHandle, &c, portMAX_DELAY);	// Fills the TX queue.
-	USART1->CR1 |= USART_CR1_TXEIE;						// Starts the TX interrupt chain to transmit the TX queue.
+	size_t i;
+	for (i = 0; i < len; i++)
+	{
+		xQueueSend(STShell_TXHandle, c, portMAX_DELAY);	// Fills the TX queue.
+		USART1->CR1 |= USART_CR1_TXEIE;	// Starts the TX interrupt chain to transmit the TX queue.
+		c++;
+	}
+	return (int) i;
 }
 
-char commandbuf[CBLEN+1] = {0};	// Command buffer
-int cbpos = 0;					// Pointer position in command buffer.
-bool new_command = true;		// True if the command to be typed is new.
+// Returns bytes accepted
+int shell_rx_uart1(void*, char *buf, size_t len)
+{
+	size_t n = 0;
+	char c;
+	while (n < len && xQueueReceive(STShell_RXHandle, &c, 0) == pdTRUE)
+		buf[n++] = c;
+	return (int)n;
+}
 
 // Send a complete string via shell_tx
-void shell_tx_str(const char *p)
+int shell_tx_str_len(shell_ctx_t *ctx, const char *p, unsigned int len)
 {
-	while (*p)
+	while (len)
 	{
-		shell_tx(*p);
-		p++;
+		int n = ctx->tx(ctx->tx_ctx, p, len);
+		if (n<0)
+			return n;
+		p += n;
+		len -= n;
 	}
+	return 0;
 }
 
-void shell_tx_str_len(const char *p, unsigned int len)
+int shell_tx_str(shell_ctx_t *ctx, const char *p)
 {
-	while (len--)
-	{
-		shell_tx(*p);
-		p++;
-	}
+	int len = strlen(p);
+	return shell_tx_str_len(ctx, p, len);
 }
 
+int shell_tx(shell_ctx_t *ctx, char c)
+{
+	return shell_tx_str_len(ctx, &c, 1);
+}
 
-int shell_printf(const char *fmt, ...)
+int shell_printf(shell_ctx_t *ctx, const char *fmt, ...)
 {
 	char buf[SHELL_PRINTF_BUFLEN];
 	va_list ap;
@@ -68,131 +86,130 @@ int shell_printf(const char *fmt, ...)
 		return n;
 	if (n >= SHELL_PRINTF_BUFLEN)
 	{
-		shell_tx_str(buf);			// Send what we have.
-		shell_tx_str("...");		// Visualize that something is missing.
+		shell_tx_str(ctx, buf);			// Send what we have.
+		shell_tx_str(ctx, "...");		// Visualize that something is missing.
 		return n;
 	}
-	shell_tx_str(buf);
+	shell_tx_str(ctx, buf);
 	return n;
 }
 
-void move_line_right(char c)	// For inserting characters at cbpos and moving the remainder of the line right.
+//======================================================================
+// Line editor logic
+
+void move_line_right(shell_ctx_t *ctx, char c)	// For inserting characters at cbpos and moving the remainder of the line right.
 {
-	if (cbpos >= CBLEN)							// Refuse new characters if the string is full.
+	if (ctx->cbpos >= CBLEN)							// Refuse new characters if the string is full.
 		return;
 
-	char *tail = commandbuf + cbpos;			// The tail is the section that will be moved
+	char *tail = ctx->commandbuf + ctx->cbpos;			// The tail is the section that will be moved
 	int tail_len = strlen((char*) tail);				// It has a length
 
 	for (int i = tail_len; i>=0; i--)			// Move the tail to make space.
-		if (i+1+cbpos < CBLEN)					// Drop section of the tail that is too long.
+		if (i+1+ctx->cbpos < CBLEN)					// Drop section of the tail that is too long.
 			tail[i+1] = tail[i];
 
-	commandbuf[cbpos] = c;						// Place our character in the newly available slot
-	cbpos++;									// Increment cursor (potentially hitting CBLEN)
+	ctx->commandbuf[ctx->cbpos] = c;						// Place our character in the newly available slot
+	ctx->cbpos++;									// Increment cursor (potentially hitting CBLEN)
 
-	int keep_tail = strlen((char*) commandbuf+cbpos);	// The tail length may have changed
-	shell_tx_str(commandbuf+cbpos-1);			// Print our new character c plus the tail
+	int keep_tail = strlen((char*) ctx->commandbuf+ctx->cbpos);	// The tail length may have changed
+	shell_tx_str(ctx, ctx->commandbuf+ctx->cbpos-1);			// Print our new character c plus the tail
 
 	for (int i = keep_tail; i > 0; i--)			// Snap back the tail length
-		shell_tx_str("\x1B[D");					// By sending back arrows.
+		shell_tx_str(ctx, "\x1B[D");					// By sending back arrows.
 }
 
-void delete()
+void delete(shell_ctx_t *ctx)
 {
-	if (cbpos == strlen(commandbuf))
+	if (ctx->cbpos == strlen(ctx->commandbuf))
 		return;
 
-	char *line_right_of_cursor = commandbuf + cbpos;	// We are going to overwrite what is at the cursor.
+	char *line_right_of_cursor = ctx->commandbuf + ctx->cbpos;	// We are going to overwrite what is at the cursor.
 	int to_move = strlen(line_right_of_cursor);			// We also want to copy the first null character.
 	for (int i = 0; i < to_move; i++)
 	{
 		line_right_of_cursor[i] = line_right_of_cursor[i+1];
 		if (line_right_of_cursor[i])
-			shell_tx(line_right_of_cursor[i]);
+			shell_tx(ctx, line_right_of_cursor[i]);
 		else
-			shell_tx(' ');
+			shell_tx(ctx, ' ');
 	}
 	to_move = strlen(line_right_of_cursor);				// String is probably changed.;
 	for (int i = to_move+1; i; i--)
-	{
-		shell_tx_str("\x1B[D");
-	}
+		shell_tx_str(ctx, "\x1B[D");
 }
 
-void backspace()	// For deleting characters at cbpos, and moving the remainder of the line left.
+void backspace(shell_ctx_t *ctx)	// For deleting characters at cbpos, and moving the remainder of the line left.
 {
-	if (0 == cbpos)										// Cursor already leftmost? Done.
+	if (0 == ctx->cbpos)										// Cursor already leftmost? Done.
 		return;
 
-	cbpos--;											// Cursor to left.
-	shell_tx_str("\x1B[D");								// Displayed string: cursor to left.
-	delete();
+	ctx->cbpos--;											// Cursor to left.
+	shell_tx_str(ctx, "\x1B[D");								// Displayed string: cursor to left.
+	delete(ctx);
 }
 
-void reinstate_line()	// Doskey functionality for one line only.
+void reinstate_line(shell_ctx_t *ctx)	// Doskey functionality for one line only.
 {
-	int buf_len = strlen(commandbuf);
-	if (cbpos == 0 && buf_len > 0)
+	int buf_len = strlen(ctx->commandbuf);
+	if (ctx->cbpos == 0 && buf_len > 0)
 	{
 		for (int i = 0; i < buf_len; i++)
-			shell_tx(commandbuf[i]);
-		cbpos = buf_len;
+			shell_tx(ctx, ctx->commandbuf[i]);
+		ctx->cbpos = buf_len;
 	}
-	new_command = false;
+	ctx->new_command = false;
 }
 
-void clear_line()	// Inverse of the doskey, clear the line.
+void clear_line(shell_ctx_t *ctx)	// Inverse of the doskey, clear the line.
 {
-	int buf_len = strlen(commandbuf);
-	for (int i = 0; i < buf_len-cbpos; i++)	// There can be characters right of cursor position
-		shell_tx_str("\x1B[C");				// Move to the end.
+	int buf_len = strlen(ctx->commandbuf);
+	for (int i = 0; i < buf_len-ctx->cbpos; i++)	// There can be characters right of cursor position
+		shell_tx_str(ctx, "\x1B[C");				// Move to the end.
 	for (int i = 0; i < buf_len; i++)		// Then clear character by
 	{										// character to the left.
-		shell_tx_str("\x1B[D");
-		shell_tx(' ');
-		shell_tx_str("\x1B[D");
+		shell_tx_str(ctx, "\x1B[D");
+		shell_tx(ctx, ' ');
+		shell_tx_str(ctx, "\x1B[D");
 	}
-	cbpos = 0;
-	new_command = true;
+	ctx->cbpos = 0;
+	ctx->new_command = true;
 }
 
-typedef enum { RX_NORMAL, RX_ESC, RX_ESC_BRACKET, RX_ESC_BRACKET_3 } rx_state_t;
-static rx_state_t rx_state = RX_NORMAL;
-void shell_rx(uint8_t c)
+void shell_rx(shell_ctx_t *ctx, uint8_t c)
 {
-	if (RX_ESC == rx_state)
+	if (RX_ESC == ctx->rx_state)
 	{
 		if ('[' == c)
-			rx_state = RX_ESC_BRACKET;
+			ctx->rx_state = RX_ESC_BRACKET;
 		else
-			rx_state = RX_NORMAL;
+			ctx->rx_state = RX_NORMAL;
 		return;
 	}
 
-	if (RX_ESC_BRACKET == rx_state)
+	if (RX_ESC_BRACKET == ctx->rx_state)
 	{
-		if ('D' == c)		{ /* left arrow */ if (cbpos > 0) 					{ cbpos--; shell_tx_str("\x1B[D");} }
-		else if ('C' == c)	{ /* right arrow */if (cbpos < strlen(commandbuf)) 	{ cbpos++; shell_tx_str("\x1B[C");} }
-		else if ('A' == c)	{ /* up arrow */ 	reinstate_line(); 	}
-		else if ('B' == c)	{ /* down arrow */ 	clear_line();		}
-		rx_state = RX_NORMAL;
-		 if		('3' == c)	{ rx_state = RX_ESC_BRACKET_3;			}
+		if ('D' == c)		{ /* left arrow */ if (ctx->cbpos > 0) 						{ ctx->cbpos--; shell_tx_str(ctx, "\x1B[D");} }
+		else if ('C' == c)	{ /* right arrow */if (ctx->cbpos < strlen(ctx->commandbuf)){ ctx->cbpos++; shell_tx_str(ctx, "\x1B[C");} }
+		else if ('A' == c)	{ /* up arrow */ 	reinstate_line(ctx); 	}
+		else if ('B' == c)	{ /* down arrow */ 	clear_line(ctx);		}
+		ctx->rx_state = RX_NORMAL;
+		 if		('3' == c)	{ ctx->rx_state = RX_ESC_BRACKET_3;			}
 		return;
 	}
 
-	if (RX_ESC_BRACKET_3 == rx_state)
+	if (RX_ESC_BRACKET_3 == ctx->rx_state)
 	{
 		if ('~' == c)
-			delete();
-		rx_state = RX_NORMAL;
+			delete(ctx);
+		ctx->rx_state = RX_NORMAL;
 		return;
 	}
 
 	// From here, rx_state is always NORMAL
 	if (0x1B == c)
 	{
-		rx_state = RX_ESC;
+		ctx->rx_state = RX_ESC;
 		return;
 	}
 
@@ -201,35 +218,43 @@ void shell_rx(uint8_t c)
 
 	if (0x7f == c || 0x08 == c)
 	{
-		backspace();
+		backspace(ctx);
 		return;
 	}
 
 	if ('\r' == c)	// In case a return is typed
 	{
-		shell_tx('\r');
-		shell_tx('\n');
-		if (cbpos != 0)
-			dispatch();
-		cbpos = 0;
-		new_command = true;
-		shell_tx_str(SHELL_PROMPT);
+		shell_tx(ctx, '\r');
+		shell_tx(ctx, '\n');
+		if (ctx->cbpos != 0)
+			dispatch(ctx);
+		ctx->cbpos = 0;
+		ctx->new_command = true;
+		shell_tx_str(ctx, SHELL_PROMPT);
 		return;
 	}
 
 	// In case a non return is typed
-	if (new_command)
-		memset(commandbuf, 0, sizeof(commandbuf));
-	move_line_right(c);
-	new_command = false;
+	if (ctx->new_command)
+		memset(ctx->commandbuf, 0, sizeof(ctx->commandbuf));
+	move_line_right(ctx, c);
+	ctx->new_command = false;
 }
 
 void shell_task()
 {
-	char c;
+	#define SHELLRXBUFLEN 32
+	char buf[SHELLRXBUFLEN];
 	while (1)
-		if (xQueueReceive(STShell_RXHandle, &c, portMAX_DELAY) == pdTRUE)
-			shell_rx(c);
+	{
+		for (int i = 0; i < NUM_SHELL; i++)
+		{
+			int nrec = shell_ctx[i].rx(&shell_ctx[i], buf, SHELLRXBUFLEN);
+			for (int j = 0; j < nrec; j++)
+				shell_rx(&shell_ctx[i], buf[j]);
+		}
+		vTaskDelay(1);
+	}
 }
 
 //====================================================================
@@ -266,7 +291,7 @@ CMD(fat,		s_fat,		"[cmd] runs a fat command") \
 CMD(at,			s_at,		"[cmd] runs a at command") \
 CMD(net,		s_net,		"[cmd] runs a net command") \
 // Types
-typedef void (*cmd_func_t)(int argc, char **argv);
+typedef void (*cmd_func_t)(shell_ctx_t *ctx, int argc, char **argv);
 typedef struct
 {
 	const char *cmd;
@@ -274,7 +299,7 @@ typedef struct
 } cmd_t;
 
 // Function prototypes
-#define CMD(NAME, FNC, HELP) void FNC (int, char **);
+#define CMD(NAME, FNC, HELP) void FNC (shell_ctx_t*, int, char **);
 COMMANDS
 #undef CMD
 
@@ -287,9 +312,9 @@ static const cmd_t commands[] =
 	{NULL, NULL}
 };
 
-void detokenize(int cblen)
+void detokenize(shell_ctx_t *ctx, int cblen)
 {
-	char *p = commandbuf;
+	char *p = ctx->commandbuf;
 	for (int j = cblen; j; j--)
 	{
 		if (*p == 0)
@@ -299,13 +324,13 @@ void detokenize(int cblen)
 }
 
 // Dispatcher. Reads from global state commandbuf, cbpos.
-void dispatch(void)
+void dispatch(shell_ctx_t *ctx)
 {
-	int cblen = strlen(commandbuf);
+	int cblen = strlen(ctx->commandbuf);
 	char *argv[AVLEN];
 	int argc = 0;
 
-	char *p = commandbuf;
+	char *p = ctx->commandbuf;
 	while (*p && argc < AVLEN)
 	{
 		while (*p == ' ')
@@ -329,13 +354,13 @@ void dispatch(void)
 	for (int i = 0; commands[i].cmd; i++)
 		if (strcmp(argv[0], commands[i].cmd) == 0)
 		{
-			commands[i].fnc(argc, argv);
-			detokenize(cblen);
+			commands[i].fnc(ctx, argc, argv);
+			detokenize(ctx, cblen);
 			return;
 		}
 
-	shell_tx_str("Unknown command\r\n");
-	detokenize(cblen);
+	shell_tx_str(ctx, "Unknown command\r\n");
+	detokenize(ctx, cblen);
 }
 
 
@@ -343,96 +368,86 @@ void dispatch(void)
 //===========================================================================
 // Commands
 
-void s_help(int argc, char **argv)
+void s_help(shell_ctx_t *ctx, int argc, char **argv)
 {
-	shell_tx_str("STShell " SHELL_VER "\r\n");
-#define CMD(NAME, FNC, HELP) shell_tx_str(#NAME " - " HELP "\r\n");
+	shell_tx_str(ctx, "STShell " SHELL_VER "\r\n");
+#define CMD(NAME, FNC, HELP) shell_tx_str(ctx, #NAME " - " HELP "\r\n");
 	COMMANDS
 #undef CMD
 }
 
-void s_version(int argc, char ** argv)
+void s_version(shell_ctx_t *ctx, int argc, char ** argv)
 {
-	char buf[80];
-	shell_tx_str("STShell " SHELL_VER "\r\n");
+	shell_tx_str(ctx, "STShell " SHELL_VER "\r\n");
 
 	// Mistral helped me out with this.
-
 	#define FLASH_SIZE_REG    (*(uint16_t *)0x1FFFF7CC) // Flash size in KB
 	#define UID_REG           ((uint32_t *)0x1FFFF7AC)	// Unique device ID (96 bits = 3 words)
 	#define DBGMCU_IDCODE     (*(uint32_t *)0xE0042000) // Device ID (tells you which chip in the family)
 	// Bits [15:0] = device ID, bits [31:16] = revision
     uint32_t idcode = DBGMCU_IDCODE;
-    sprintf(buf, "Device ID: 0x%03X\r\n", (unsigned int) (idcode & 0xFFF));
-    shell_tx_str(buf);
-    sprintf(buf, "Revision: 0x%04X\r\n", (unsigned int) ((idcode >> 16) & 0xFFFF));
-    shell_tx_str(buf);
-    sprintf(buf, "Flash: %u KB\r\n", FLASH_SIZE_REG);
-    shell_tx_str(buf);
-    sprintf(buf, "UID: %08lX%08lX%08lX\r\n", UID_REG[0], UID_REG[1], UID_REG[2]);
-    shell_tx_str(buf);
+    shell_printf(ctx, "Device ID: 0x%03X\r\n", (unsigned int) (idcode & 0xFFF));
+    shell_printf(ctx, "Revision: 0x%04X\r\n", (unsigned int) ((idcode >> 16) & 0xFFFF));;
+    shell_printf(ctx, "Flash: %u KB\r\n", FLASH_SIZE_REG);
+    shell_printf(ctx, "UID: %08lX%08lX%08lX\r\n", UID_REG[0], UID_REG[1], UID_REG[2]);
+
     // Bits [31:24] = Implementer (0x41 = ARM)
     // Bits [23:20] = Variant (major revision)
     // Bits [19:16] = Architecture (0xF = Cortex-M4)
     // Bits [15:4]  = Part number (0xC24 = Cortex-M4)
     // Bits [3:0]   = Revision (minor revision rXpY)
-    sprintf(buf, "Core: ARM r%lup%lu\r\n",
+    shell_printf(ctx, "Core: ARM r%lup%lu\r\n",
         (SCB->CPUID >> 20) & 0xF,   // Variant (major)
         SCB->CPUID & 0xF);           // Revision (minor)
-    shell_tx_str(buf);
 
-    shell_tx_str("Build: " __DATE__ " " __TIME__ "\r\n");
-    shell_tx_str("Compiler version: " __VERSION__ "\r\n");
+    shell_tx_str(ctx, "Build: " __DATE__ " " __TIME__ "\r\n");
+    shell_tx_str(ctx, "Compiler version: " __VERSION__ "\r\n");
 #ifdef __GNUC__
-    sprintf(buf, "Compiler: GCC %d.%d.%d\r\n", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+    shell_printf(ctx, "Compiler: GCC %d.%d.%d\r\n", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
 #elif defined(__ICCARM__)
-    sprintf(buf, "Compiler: IAR\r\n");
+    shell_tx_str(ctx, "Compiler: IAR\r\n");
 #elif defined(__CC_ARM)
-    sprintf(buf, "Compiler: ARMCC\r\n");
+    shell_tx_str(ctx, "Compiler: ARMCC\r\n");
 #endif
-    shell_tx_str(buf);
 
     uint32_t v = HAL_GetHalVersion();
-    sprintf(buf, "HAL: %lu.%lu.%lu\r\n",
+    shell_printf(ctx, "HAL: %lu.%lu.%lu\r\n",
         (v >> 24) & 0xFF,
         (v >> 16) & 0xFF,
         (v >> 8)  & 0xFF);
-    shell_tx_str(buf);
 
-    sprintf(buf, "CMSIS: %u.%u\r\n",
+    shell_printf(ctx, "CMSIS: %u.%u\r\n",
     		__CM_CMSIS_VERSION_MAIN,
 			__CM_CMSIS_VERSION_SUB);
-    shell_tx_str(buf);
-    sprintf(buf, "CMSIS Device: %u.%u.%u\r\n",
+    shell_printf(ctx, "CMSIS Device: %u.%u.%u\r\n",
     		__STM32F3_CMSIS_VERSION_MAIN,  // MAIN
 			__STM32F3_CMSIS_VERSION_SUB1,  // SUB1
 			__STM32F3_CMSIS_VERSION_SUB2); // SUB2
-    shell_tx_str(buf);
 }
 
-void s_test(int argc, char **argv)
+void s_test(shell_ctx_t *ctx, int argc, char **argv)
 {
 	for (; argc; argc--)
 	{
-		shell_tx_str(*argv);
-		shell_tx_str("\r\n");
+		shell_tx_str(ctx, *argv);
+		shell_tx_str(ctx, "\r\n");
 		argv++;
 	}
 }
 
-void s_clear(int argc, char **argv)
+void s_clear(shell_ctx_t *ctx, int argc, char **argv)
 {
-	shell_tx_str("\033[0;0H" "\033[2J");
+	shell_tx_str(ctx, "\033[0;0H" "\033[2J");
 }
 
 // Live peripheral viewer. First version shows just GPIO as 0b0000000000000000
-void s_live_gpiosec(uint16_t gpio)
+void s_live_gpiosec(shell_ctx_t *ctx, uint16_t gpio)
 {
 	for (int i=0; i < 16; i++)
-		shell_tx(gpio & (1U << i) ? '1' : '0');
+		shell_tx(ctx, gpio & (1U << i) ? '1' : '0');
 }
 
-void s_live_gpioline()
+void s_live_gpioline(shell_ctx_t *ctx)
 {
 	uint16_t port_a = GPIOA->IDR;  // Input Data Register, 16 bits
 	uint16_t port_b = GPIOB->IDR;
@@ -440,97 +455,84 @@ void s_live_gpioline()
 	uint16_t port_d = GPIOD->IDR;
 	uint16_t port_e = GPIOE->IDR;
 	uint16_t port_f = GPIOF->IDR;
-	shell_tx_str("GPIO PORTx [0 1 2 ... 14 15]\r\n");
-	shell_tx_str("GPIOA: "); 	s_live_gpiosec(port_a);
-	shell_tx_str(" GPIOB: "); 	s_live_gpiosec(port_b);
-	shell_tx_str(" GPIOC: "); 	s_live_gpiosec(port_c);
-	shell_tx_str("\r\nGPIOD: ");s_live_gpiosec(port_d);
-	shell_tx_str(" GPIOE: "); 	s_live_gpiosec(port_e);
-	shell_tx_str(" GPIOF: "); 	s_live_gpiosec(port_f);
-	shell_tx_str("\r\n");
+	shell_tx_str(ctx, "GPIO PORTx [0 1 2 ... 14 15]\r\n");
+	shell_tx_str(ctx, "GPIOA: "); 	s_live_gpiosec(ctx, port_a);
+	shell_tx_str(ctx, " GPIOB: "); 	s_live_gpiosec(ctx, port_b);
+	shell_tx_str(ctx, " GPIOC: "); 	s_live_gpiosec(ctx, port_c);
+	shell_tx_str(ctx, "\r\nGPIOD: ");s_live_gpiosec(ctx, port_d);
+	shell_tx_str(ctx, " GPIOE: "); 	s_live_gpiosec(ctx, port_e);
+	shell_tx_str(ctx, " GPIOF: "); 	s_live_gpiosec(ctx, port_f);
+	shell_tx_str(ctx, "\r\n");
 }
 
-void s_live_temp_vbat_vref_line()
+void s_live_temp_vbat_vref_line(shell_ctx_t *ctx)
 {
 	int32_t vdda = get_vdda();
 	int32_t temp = get_temp();
 	int32_t vbat = get_vbat();
-	char buf[128];
-
-	sprintf(buf, "Vcc = %4ld [mv] Temperature: %3ld [0.1 degC] Vbat: %4ld [mV]\r\n", vdda, temp, vbat);
-	shell_tx_str(buf);
+	shell_printf(ctx, "Vcc = %4ld [mv] Temperature: %3ld [0.1 degC] Vbat: %4ld [mV]\r\n", vdda, temp, vbat);
 }
 
-void s_adc_line(ADC_HandleTypeDef* adc)
+void s_adc_line(shell_ctx_t *ctx, ADC_HandleTypeDef* adc)
 {
-	char buf[16];
 	for (int i = 1; i <= 18; i++)
-	{
-		sprintf(buf, "%4ld ", get_adc(adc, i));
-		shell_tx_str(buf);
-	}
-	shell_tx_str("\r\n");
+		shell_printf(ctx, "%4ld ", get_adc(adc, i));
+	shell_tx_str(ctx, "\r\n");
 }
 
-void s_line_LSM303AGR()
+void s_line_LSM303AGR(shell_ctx_t *ctx)
 {
-	char buf[128];
 	int temp_i = lsm303agr.temp * 10;
 	int axi, ayi, azi, mxi, myi, mzi;
 	axi = lsm303agr.acc.x*1000; ayi = lsm303agr.acc.y * 1000; azi = lsm303agr.acc.z * 1000;
 	mxi = lsm303agr.mag.x*1000; myi = lsm303agr.mag.y * 1000; mzi = lsm303agr.mag.z * 1000;
-	sprintf(buf, "LSM303AGR Temp: %4d [0.1 degC] acc xyz %5d %5d %5d [mG] mag xyz %4d %4d %4d [mGauss]\r\n", temp_i, axi, ayi, azi, mxi, myi, mzi);
-	shell_tx_str(buf);
+	shell_printf(ctx, "LSM303AGR Temp: %4d [0.1 degC] acc xyz %5d %5d %5d [mG] mag xyz %4d %4d %4d [mGauss]\r\n", temp_i, axi, ayi, azi, mxi, myi, mzi);
 }
 
-void s_line_I3G4250D(void)
+void s_line_I3G4250D(shell_ctx_t *ctx)
 {
-	char buf[128];
 	int temp, x, y, z;
 	temp = i3g4250d.temp; x = i3g4250d.x; y = i3g4250d.y; z = i3g4250d.z;
-	sprintf(buf, "I3G4250D Temp: %3d [?] gyro xyz %5d %5d %5d [?]\r\n", temp, x, y, z);
-	shell_tx_str(buf);
+	shell_printf(ctx, "I3G4250D Temp: %3d [?] gyro xyz %5d %5d %5d [?]\r\n", temp, x, y, z);
 }
 
-void s_line_time(void)
+void s_line_time(shell_ctx_t *ctx)
 {
 	RTC_TimeTypeDef t;
 	RTC_DateTypeDef d;
 	HAL_RTC_GetTime(&hrtc, &t, RTC_FORMAT_BIN);
 	HAL_RTC_GetDate(&hrtc, &d, RTC_FORMAT_BIN);
-	char buf[64];
-	sprintf(buf, "%04u-%02u-%02u %02u:%02u:%02u\r\n",
+	shell_printf(ctx, "%04u-%02u-%02u %02u:%02u:%02u\r\n",
 			d.Year + 2000, d.Month, d.Date,
 			t.Hours, t.Minutes, t.Seconds);
-	shell_tx_str(buf);
 }
 
-void s_live(int argc, char **argv)
+void s_live(shell_ctx_t *ctx, int argc, char **argv)
 {
 	char c;
-	shell_tx_str("\x1b[?25l" "\033[2J"); // Cursur hide, home.
+	shell_tx_str(ctx, "\x1b[?25l" "\033[2J"); // Cursur hide, home.
 	while ( xQueueReceive(STShell_RXHandle, &c, 0) != pdTRUE )
 	{
-		shell_tx_str("\033[0;0H");
-		s_live_gpioline();
-		s_live_temp_vbat_vref_line();
-		s_adc_line(&hadc1);
-		s_line_LSM303AGR();
-		s_line_I3G4250D();
-		s_line_time();
+		shell_tx_str(ctx, "\033[0;0H");
+		s_live_gpioline(ctx);
+		s_live_temp_vbat_vref_line(ctx);
+		s_adc_line(ctx, &hadc1);
+		s_line_LSM303AGR(ctx);
+		s_line_I3G4250D(ctx);
+		s_line_time(ctx);
 
 		osDelay(250);
 	}
-	shell_tx_str("\x1b[?25h" "\033[0;0H" "\033[2J"); // Cursor aan, home, clearscreen.
+	shell_tx_str(ctx, "\x1b[?25h" "\033[0;0H" "\033[2J"); // Cursor aan, home, clearscreen.
 }
 
-void s_read_2(int addr, int length)
+void s_read_2(shell_ctx_t *ctx, int addr, int length)
 {
     // Align op 4 bytes (32-bit read boundary)
     uint32_t aligned = addr & ~3U;
     uint32_t end = aligned + ((length + (addr - aligned) + 3) & ~3U);
 
-    shell_tx_str("\r\n");
+    shell_tx_str(ctx, "\r\n");
 
     for (uint32_t a = aligned; a < end; a += 32)
     {
@@ -551,15 +553,15 @@ void s_read_2(int addr, int length)
             buf[w*4+3] = val >> 24;
         }
 
-        s_rd_hex_line(a, buf, line_len);
+        s_rd_hex_line(ctx, a, buf, line_len);
     }
 }
 
-void s_read(int argc, char **argv)
+void s_read(shell_ctx_t *ctx, int argc, char **argv)
 {
     if (argc < 2)
     {
-        shell_tx_str("Usage: rd <address> [length_bytes]\r\n");
+        shell_tx_str(ctx, "Usage: rd <address> [length_bytes]\r\n");
         return;
     }
 
@@ -572,19 +574,19 @@ void s_read(int argc, char **argv)
     //if (length > 256)
     //    length = 256;
 
-    s_read_2(addr, length);
+    s_read_2(ctx, addr, length);
 }
 
 extern uint32_t _estack;
 extern uint32_t* _Min_Stack_Size;
-void s_stack(int argc, char **argv)
+void s_stack(shell_ctx_t *ctx, int argc, char **argv)
 {
 	if (argc >=2)
 	{
 		if (strcmp(argv[1], "paint") == 0)
 			stack_paint();
 		if (strcmp(argv[1], "show") == 0)
-			s_read_2(0x10000000, 0x2000);
+			s_read_2(ctx, 0x10000000, 0x2000);
 		return;
 	}
 
@@ -594,12 +596,10 @@ void s_stack(int argc, char **argv)
     while (*p == 0x23232323) p++;
     uint32_t size =  (uint32_t)&_estack - (uint32_t)p;
 
-    char buf[32];
-    sprintf(buf, "Stack: %0ld\r\n", size);
-    shell_tx_str(buf);
+    shell_printf(ctx, "Stack: %0ld\r\n", size);
 }
 
-void s_paint(int argc, char **argv)
+void s_paint(shell_ctx_t *ctx, int argc, char **argv)
 {
 	stack_paint();
 }
@@ -619,11 +619,10 @@ uint8_t read_mag_reg(uint8_t addr, uint8_t reg)
 	return 0xFE;
 }
 
-void magcalline(const char* name, int16_t value, int16_t min, int16_t max, int16_t scale)
+void magcalline(shell_ctx_t *ctx, const char* name, int16_t value, int16_t min, int16_t max, int16_t scale)
 {
 	char buf[67];
-	sprintf(buf, "%s: %5d / %5d / %5d  ", name, min, value, max);
-	shell_tx_str(buf);
+	shell_printf(ctx, "%s: %5d / %5d / %5d  ", name, min, value, max);
 	int have_o = 0;
 	for (int i = 0; i < 64; i++)
 	{
@@ -642,10 +641,10 @@ void magcalline(const char* name, int16_t value, int16_t min, int16_t max, int16
 	buf[64] = '\r';
 	buf[65] = '\n';
 	buf[66] = 0;
-	shell_tx_str(buf);
+	shell_tx_str(ctx, buf);
 }
 
-void magcal()
+void magcal(shell_ctx_t *ctx)
 {
 	#define RANGE 1000
 	int16_t x = lsm303agr.magraw.x;
@@ -653,7 +652,7 @@ void magcal()
 	int16_t z = lsm303agr.magraw.z;
 	int16_t xmin = x, xmax = x, ymin = y, ymax = y, zmin = z, zmax = z;
 	char c;
-	shell_tx_str("\x1b[?25l" "\033[2J"); // Cursur hide, home.
+	shell_tx_str(ctx, "\x1b[?25l" "\033[2J"); // Cursur hide, home.
 	while ( xQueueReceive(STShell_RXHandle, &c, 0) != pdTRUE )
 	{
 		x = lsm303agr.magraw.x;
@@ -665,82 +664,78 @@ void magcal()
 		if (y > ymax) 	ymax = y;
 		if (z < zmin)	zmin = z;
 		if (z > zmax) 	zmax = z;
-		shell_tx_str("\033[0;0H");
-		magcalline("X", x, xmin, xmax, RANGE);
-		magcalline("Y", y, ymin, ymax, RANGE);
-		magcalline("Z", z, zmin, zmax, RANGE);
+		shell_tx_str(ctx, "\033[0;0H");
+		magcalline(ctx, "X", x, xmin, xmax, RANGE);
+		magcalline(ctx, "Y", y, ymin, ymax, RANGE);
+		magcalline(ctx, "Z", z, zmin, zmax, RANGE);
 
 		osDelay(100);
 	}
-	shell_tx_str("\x1b[?25h" "\033[0;0H" "\033[2J"); // Cursor aan, home, clearscreen.
+	shell_tx_str(ctx, "\x1b[?25h" "\033[0;0H" "\033[2J"); // Cursor aan, home, clearscreen.
 	LSM303AGR_cal[0] = (xmax-xmin)/2 + xmin;
 	LSM303AGR_cal[1] = (ymax-ymin)/2 + ymin;
 	LSM303AGR_cal[2] = (zmax-zmin)/2 + zmin;
 	HAL_StatusTypeDef rv = nvstore(NV_LSM303AGR_MAGCAL, sizeof(LSM303AGR_cal), (void *) LSM303AGR_cal);
 	if (rv == HAL_OK)
-		shell_tx_str("Calibration stored.\r\n");
+		shell_tx_str(ctx, "Calibration stored.\r\n");
 	else
-		shell_tx_str("Calibration storing failed.\r\n");
+		shell_tx_str(ctx, "Calibration storing failed.\r\n");
 }
 
-void s_mag(int argc, char **argv)
+void s_mag(shell_ctx_t *ctx, int argc, char **argv)
 {
 	if (argc == 2 && strcmp(argv[1], "cal") == 0)
-		magcal();
+		magcal(ctx);
 	else
 	{
-		char buf[32];
 		for (int i = 0; i < 0x100; i++)
 		{
 			uint8_t rv = read_mag_reg(LSM303AGR_ADDR_M, i);
-			sprintf(buf, "%3X %3X %3X\r\n", LSM303AGR_ADDR_M>>1, i, rv);
-			shell_tx_str(buf);
+			shell_printf(ctx, "%3X %3X %3X\r\n", LSM303AGR_ADDR_M>>1, i, rv);
 		}
 	}
 }
 
-void s_lin(int argc, char **argv)
+void s_lin(shell_ctx_t *ctx, int argc, char **argv)
 {
-	char buf[32];
 	for (int i = 0; i < 0x100; i++)
 	{
 		uint8_t rv = read_mag_reg(LSM303AGR_ADDR_A, i);
-		sprintf(buf, "%3X %3X %3X\r\n", LSM303AGR_ADDR_A>>1, i, rv);
-		shell_tx_str(buf);
+		shell_printf(ctx, "%3X %3X %3X\r\n", LSM303AGR_ADDR_A>>1, i, rv);
 	}
 }
 
 // Prints memory content per flash page. Probably writes in the future as well.
-void s_page(int argc, char **argv)
+void s_page(shell_ctx_t *ctx, int argc, char **argv)
 {
 	const char errstr[] = "Please supply a page number as argument in the range [0-7F]\r\n";
 	if (argc <= 1)
 	{
-		shell_tx_str(errstr);
+		shell_tx_str(ctx, errstr);
 		return;
 	}
 	int pagenr = s_atoi_hex(argv[1]);
 	if (pagenr < 0 || pagenr > 0x7F)
 	{
-		shell_tx_str(errstr);
+		shell_tx_str(ctx, errstr);
 		return;
 	}
-	s_read_2(FLASH_BASE + pagenr * FLASH_PAGE_SIZE, FLASH_PAGE_SIZE);
+	s_read_2(ctx, FLASH_BASE + pagenr * FLASH_PAGE_SIZE, FLASH_PAGE_SIZE);
 }
 
 // Fills a flash page with a given pattern.
-void s_flashfill(int argc, char **argv)
+void s_flashfill(shell_ctx_t *ctx, int argc, char **argv)
 {
 	const char errstr[] = "Usage: flashfill [pagenr 0-7F] [pattern 0-FFFFFFFF]\r\n";
 	if (argc < 3)
 	{
-		shell_tx_str(errstr);
+		shell_tx_str(ctx, errstr);
 		return;
 	}
 	int pagenr = s_atoi_hex(argv[1]);
 	if (pagenr > 0x7F)
 	{
-		shell_tx_str(errstr);
+		shell_tx_str(ctx, errstr);
 		return;
 	}
 	uint32_t pattern = s_atoi_hex(argv[2]);
@@ -751,7 +746,7 @@ void s_flashfill(int argc, char **argv)
 	{
 		if (HAL_OK != HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, pattern))
 		{
-			shell_tx_str("Programming failed\r\n");
+			shell_tx_str(ctx, "Programming failed\r\n");
 			break;
 		}
 		addr += 4;
@@ -760,18 +755,18 @@ void s_flashfill(int argc, char **argv)
 }
 
 // Fills a flash page with a given pattern.
-void s_flasherase(int argc, char **argv)
+void s_flasherase(shell_ctx_t *ctx, int argc, char **argv)
 {
 	const char errstr[] = "Usage: flasherase [pagenr 0-7F]\r\n";
 	if (argc < 2)
 	{
-		shell_tx_str(errstr);
+		shell_tx_str(ctx, errstr);
 		return;
 	}
 	int pagenr = s_atoi_hex(argv[1]);
 	if (pagenr > 0x7F)
 	{
-		shell_tx_str(errstr);
+		shell_tx_str(ctx, errstr);
 		return;
 	}
 
@@ -788,13 +783,13 @@ void s_flasherase(int argc, char **argv)
 	{
 		char buf[32];
 		sprintf(buf, "Erase failed: %ln\r\n", &pageerr);
-		shell_tx_str(buf);
+		shell_tx_str(ctx, buf);
 	}
 	HAL_FLASH_Lock();
 	fc_count_page_erase(pagenr);
 }
 
-void s_printf(int argc, char **argv)
+void s_printf(shell_ctx_t *ctx, int argc, char **argv)
 {
 	for (int i = 1; i < argc; i++)
 	{
@@ -802,27 +797,20 @@ void s_printf(int argc, char **argv)
 			printf(" ");
 		printf(argv[i]);
 	}
-	shell_tx_str("\r\n");
+	shell_tx_str(ctx, "\r\n");
 }
 
-void s_wear(int argc, char **argv)
+void s_wear(shell_ctx_t *ctx, int argc, char **argv)
 {
-	char buf[32];
-	shell_tx_str("Flash page erase counters.\r\nPage Counter\r\n");
+	shell_tx_str(ctx, "Flash page erase counters.\r\nPage Counter\r\n");
 	for (int i = 0; i < PAGE_NUM; i++)
-	{
-		sprintf(buf, "%4x %5d\r\n", i, get_page_counter(i));
-		shell_tx_str(buf);
-	}
+		shell_printf(ctx, "%4x %5d\r\n", i, get_page_counter(i));
 }
 
-void s_mem(int argc, char **argv)
+void s_mem(shell_ctx_t *ctx, int argc, char **argv)
 {
-	char buf[32];
-	sprintf(buf, "Free heap size: %d\r\n", xPortGetFreeHeapSize());
-	shell_tx_str(buf);
-	sprintf(buf, "Minimum free heap size: %d\r\n", xPortGetMinimumEverFreeHeapSize());
-	shell_tx_str(buf);
+	shell_printf(ctx, "Free heap size: %d\r\n", xPortGetFreeHeapSize());
+	shell_printf(ctx, "Minimum free heap size: %d\r\n", xPortGetMinimumEverFreeHeapSize());
 }
 
 static const char *task_state_name(eTaskState s)
@@ -839,53 +827,45 @@ static const char *task_state_name(eTaskState s)
     }
 }
 
-void s_ps(int argc, char **argv)
+void s_ps(shell_ctx_t *ctx, int argc, char **argv)
 {
-	char buf[128];
-
 	TaskStatus_t stats[10];
 	uint32_t total_runtime;
 	UBaseType_t n = uxTaskGetSystemState(stats, 10, &total_runtime);
-	sprintf(buf, "Runtime: %lu\r\n", total_runtime);
-	shell_tx_str(buf);
-	shell_tx_str("Name         State     Pri Minstack    Runtime\r\n");
+	shell_printf(ctx, "Runtime: %lu\r\n", total_runtime);
+	shell_tx_str(ctx, "Name         State     Pri Minstack    Runtime\r\n");
 	for (UBaseType_t i = 0; i < n; i++)
 	{
-		sprintf(buf, "%-12s %s %3lu %8u %10lu\r\n",
+		shell_printf(ctx, "%-12s %s %3lu %8u %10lu\r\n",
                 stats[i].pcTaskName,
 				task_state_name(stats[i].eCurrentState),   // hmm, zie hieronder
                 stats[i].uxCurrentPriority,
                 stats[i].usStackHighWaterMark,
 				stats[i].ulRunTimeCounter);
-		shell_tx_str(buf);
 	}
 }
 
-void s_gyro(int argc, char **argv)
+void s_gyro(shell_ctx_t *ctx, int argc, char **argv)
 {
 	uint8_t data[0x40];
-	char buf[64];
 	data[0] = 0x00 | 0x80 | 0x40;		// Set read bit, set auto increment bit.
 	SPI1_CS_LOW();
 	HAL_SPI_Transmit(&hspi1, &data[0], 1, SPI1_TIMEOUT);
 	HAL_SPI_Receive(&hspi1, data, 0x40, SPI1_TIMEOUT);
 	SPI1_CS_HIGH();
 	for (int i = 0; i < 0x40; i++)
-	{
-		sprintf(buf, "%3X %3X\r\n", i, data[i]);
-		shell_tx_str(buf);
-	}
+		shell_printf(ctx, "%3X %3X\r\n", i, data[i]);
 }
 
-void s_nvstr(const char *name, nvstore_desc key, int argc, char **argv)
+void s_nvstr(shell_ctx_t *ctx, const char *name, nvstore_desc key, int argc, char **argv)
 {
 	if (argc == 1)
 	{
 		char* val = (char*) nvfind(key);
 		if (!val)
 			return;
-		shell_tx_str(val);
-		shell_tx_str("\r\n");
+		shell_tx_str(ctx, val);
+		shell_tx_str(ctx, "\r\n");
 		return;
 	}
 	if (argc >=3)
@@ -895,21 +875,21 @@ void s_nvstr(const char *name, nvstore_desc key, int argc, char **argv)
 	HAL_StatusTypeDef rv = nvstore(key, strlen(argv[1])+1, (void*) argv[1]);
 	if (rv == HAL_OK)
 	{
-		shell_tx_str(name);
-		shell_tx_str(" saved\r\n");
+		shell_tx_str(ctx, name);
+		shell_tx_str(ctx, " saved\r\n");
 	}
 	else
 	{
-		shell_tx_str("Failed to save ");
-		shell_tx_str(name);
-		shell_tx_str("\r\n");
+		shell_tx_str(ctx, "Failed to save ");
+		shell_tx_str(ctx, name);
+		shell_tx_str(ctx, "\r\n");
 	}
 }
 
-void s_note(int argc, char **argv)  {s_nvstr("Note", NV_NOTE, argc, argv);}
-void s_motd(int argc, char **argv)	{s_nvstr("MOTD", NV_MOTD, argc, argv);}
+void s_note(shell_ctx_t *ctx, int argc, char **argv)	{s_nvstr(ctx, "Note", NV_NOTE, argc, argv);}
+void s_motd(shell_ctx_t *ctx, int argc, char **argv)	{s_nvstr(ctx, "MOTD", NV_MOTD, argc, argv);}
 
-void s_bootcount(int argc, char **argv)
+void s_bootcount(shell_ctx_t *ctx, int argc, char **argv)
 {
 	uint32_t* bootp = (uint32_t*) nvfind(NV_BOOTCOUNT);
 	uint32_t boot = 0;
@@ -918,10 +898,10 @@ void s_bootcount(int argc, char **argv)
 
 	char buf[32];
 	sprintf(buf, "Bootcount: %ld\r\n", boot);
-	shell_tx_str(buf);
+	shell_tx_str(ctx, buf);
 }
 
-void s_time(int argc, char **argv)
+void s_time(shell_ctx_t *ctx, int argc, char **argv)
 {
 	RTC_TimeTypeDef t = {0};
 	RTC_DateTypeDef d = {0};
@@ -931,11 +911,9 @@ void s_time(int argc, char **argv)
 		HAL_RTC_GetTime(&hrtc, &t, RTC_FORMAT_BIN);
 		HAL_RTC_GetDate(&hrtc, &d, RTC_FORMAT_BIN);
 
-		char buf[64];
-		sprintf(buf, "%04u-%02u-%02u %02u:%02u:%02u\r\n",
+		shell_printf(ctx, "%04u-%02u-%02u %02u:%02u:%02u\r\n",
 				d.Year + 2000, d.Month, d.Date,
 				t.Hours, t.Minutes, t.Seconds);
-		shell_tx_str(buf);
 	}
 	else if (argc == 7 &&
 			sscanf(argv[1], "%lu", &Year) == 1 &&
@@ -948,15 +926,15 @@ void s_time(int argc, char **argv)
 		d.Year = Year - 2000;
 		if (HAL_OK == HAL_RTC_SetTime(&hrtc, &t, RTC_FORMAT_BIN) &&
 			HAL_OK == HAL_RTC_SetDate(&hrtc, &d, RTC_FORMAT_BIN))
-			shell_tx_str("OK\r\n");
+			shell_tx_str(ctx, "OK\r\n");
 		else
-			shell_tx_str("Error setting RTC.\r\n");
+			shell_tx_str(ctx, "Error setting RTC.\r\n");
 	}
 	else
-		shell_tx_str("Usage: no arguments to get date/time. [YYYY MM DD hh mm ss] to set time.\r\n");
+		shell_tx_str(ctx, "Usage: no arguments to get date/time. [YYYY MM DD hh mm ss] to set time.\r\n");
 }
 
-void s_pwm(int argc, char **argv)
+void s_pwm(shell_ctx_t *ctx, int argc, char **argv)
 {
 	uint16_t pwm[8];
 	if (argc == 2 && strcmp(argv[1], "off") == 0)
@@ -983,7 +961,7 @@ void s_pwm(int argc, char **argv)
 	else if (argc == 2 && strcmp(argv[1], "usb") == 0)
 		pwm_set_mode(PWM_USB);
 	else
-		shell_tx_str("Usage: [0 1 2 3 4 5 6 7], [off], [compass], [rodo] or [usb]\r\n");
+		shell_tx_str(ctx, "Usage: [0 1 2 3 4 5 6 7], [off], [compass], [rodo] or [usb]\r\n");
 }
 
 #define GLUE_ARGUMENTS(STARTARG, ARGC) \
@@ -991,7 +969,7 @@ void s_pwm(int argc, char **argv)
 		if (*i == 0) \
 			*i = ' ';
 
-void s_spi2baud(int argc, char **argv)
+void s_spi2baud(shell_ctx_t *ctx, int argc, char **argv)
 {
 	// print even de werkelijke baud
 	char buf[64];
@@ -999,7 +977,7 @@ void s_spi2baud(int argc, char **argv)
 	        HAL_RCC_GetPCLK1Freq(),
 	        (hspi2.Init.BaudRatePrescaler >> 3) + 1,
 	        HAL_RCC_GetPCLK1Freq() / ((hspi2.Init.BaudRatePrescaler >> 3) + 1));
-	shell_tx_str(buf);
+	shell_tx_str(ctx, buf);
 
 	bench_delay_init();
 	uint32_t t0 = bench_ticks();
@@ -1007,7 +985,7 @@ void s_spi2baud(int argc, char **argv)
 	uint32_t t1 = bench_ticks();
 
 	sprintf(buf, "check: %lu cycles\r\n", t1 - t0);
-	shell_tx_str(buf);
+	shell_tx_str(ctx, buf);
 }
 
 const char *FRESULT_STR[20] = {
@@ -1037,12 +1015,12 @@ const char *FRESULT_STR[20] = {
 			if (rv != FR_OK) \
 			{ \
 				sprintf(buf, "%d: %s\r\n", rv, FRESULT_STR[rv]); \
-				shell_tx_str(buf); \
+				shell_tx_str(ctx, buf); \
 			} \
 			return; \
 		}
 
-void s_fat(int argc, char **argv)
+void s_fat(shell_ctx_t *ctx, int argc, char **argv)
 {
 	#define BUFLEN 64
 	char buf[BUFLEN], buf2[BUFLEN];
@@ -1052,8 +1030,8 @@ void s_fat(int argc, char **argv)
 	{
 		DWORD vsn = 0;
 		rv = f_getlabel(argv[2], buf, &vsn);
-		shell_tx_str(buf);
-		shell_tx_str("\r\n");
+		shell_tx_str(ctx, buf);
+		shell_tx_str(ctx, "\r\n");
 		TX_RV_RET;
 	}
 	if (argc >= 3 && strcmp(argv[1], "setlabel") == 0)
@@ -1064,8 +1042,8 @@ void s_fat(int argc, char **argv)
 	if (argc >= 2 && strcmp(argv[1], "pwd") == 0)
 	{
 		rv = f_getcwd(buf, BUFLEN);
-		shell_tx_str(buf);
-		shell_tx_str("\r\n");
+		shell_tx_str(ctx, buf);
+		shell_tx_str(ctx, "\r\n");
 		TX_RV_RET;
 	}
 	if (argc >= 3 && strcmp(argv[1], "mount") == 0)
@@ -1084,10 +1062,7 @@ void s_fat(int argc, char **argv)
 		FATFS *fatp = NULL;
 		rv = f_getfree(argv[2], &nclst, &fatp);
 		if (rv == FR_OK)
-		{
-			sprintf(buf, "Free: %ld clusters, %ld bytes.\r\n", nclst, nclst * fatp->csize  * 512);
-			shell_tx_str(buf);
-		}
+			shell_printf(ctx, "Free: %ld clusters, %ld bytes.\r\n", nclst, nclst * fatp->csize  * 512);
 		TX_RV_RET;
 	}
 	if (argc >= 3 && strcmp(argv[1], "cd") == 0)
@@ -1101,15 +1076,15 @@ void s_fat(int argc, char **argv)
 		rv = f_stat(argv[2], &fno);
 		if (rv == FR_OK)
 		{
-			sprintf(buf, "fsize: %ld\r\n", fno.fsize); shell_tx_str(buf);
-			sprintf(buf, "fdate: %d\r\n", fno.fdate); shell_tx_str(buf);
-			sprintf(buf, "ftime: %d\r\n", fno.ftime); shell_tx_str(buf);
-			sprintf(buf, "fattrib: %d\r\n", fno.fattrib); shell_tx_str(buf);
-			sprintf(buf, "fname: %s\r\n", fno.fname); shell_tx_str(buf);
+			shell_printf(ctx, "fsize: %ld\r\n", fno.fsize);
+			shell_printf(ctx, "fdate: %d\r\n", fno.fdate);
+			shell_printf(ctx, "ftime: %d\r\n", fno.ftime);
+			shell_printf(ctx, "fattrib: %d\r\n", fno.fattrib);
+			shell_printf(ctx, "fname: %s\r\n", fno.fname);
 			if (fno.lfname)
 			{
-				sprintf(buf, "lfname: %s\r\n", fno.lfname); shell_tx_str(buf);
-				sprintf(buf, "lfsize: %d\r\n", fno.lfsize); shell_tx_str(buf);
+				shell_printf(ctx, "lfname: %s\r\n", fno.lfname);
+				shell_printf(ctx, "lfsize: %d\r\n", fno.lfsize);
 			}
 		}
 		TX_RV_RET;
@@ -1148,11 +1123,9 @@ void s_fat(int argc, char **argv)
 			}
 			const char* name = (fno.lfname[0] ? fno.lfname : fno.fname);
 			if (fno.fattrib & AM_DIR)
-				sprintf(buf, "   <DIR> %-16s %s\r\n", dts, name);
+				shell_printf(ctx, "   <DIR> %-16s %s\r\n", dts, name);
 			else
-				sprintf(buf, "%8lu %-16s %s\r\n", fno.fsize, dts, name);
-
-			shell_tx_str(buf);
+				shell_printf(ctx, "%8lu %-16s %s\r\n", fno.fsize, dts, name);
 		}
 		rv = f_closedir(&dp);
 		if (rv != FR_OK)
@@ -1162,10 +1135,7 @@ void s_fat(int argc, char **argv)
 		FATFS *fatp = NULL;
 		rv = f_getfree(dirstr, &nclst, &fatp);
 		if (rv == FR_OK)
-		{
-			sprintf(buf, "%8ld free\r\n", nclst * fatp->csize  * 512);
-			shell_tx_str(buf);
-		}
+			shell_printf(ctx, "%8ld free\r\n", nclst * fatp->csize  * 512);
 
 		TX_RV_RET;
 	}
@@ -1182,7 +1152,7 @@ void s_fat(int argc, char **argv)
 			rv = f_read(&fno, buf, BUFLEN, &br);
 			if ((rv != FR_OK) || (br == 0))
 				break;
-			shell_tx_str_len(buf, br);
+			shell_tx_str_len(ctx, buf, br);
 		}
 		f_close(&fno);
 		TX_RV_RET;
@@ -1221,9 +1191,9 @@ void s_fat(int argc, char **argv)
 	}
 	if (argc == 1)
 	{
-		shell_tx_str("Commands: mount, unmount, getlabel, setlabel [label], pwd, free [drive], stat [file], dir [uri], touch [file], del/rm [file], mkdir/md [name], write [name] [text to write].\r\n");
+		shell_tx_str(ctx, "Commands: mount, unmount, getlabel, setlabel [label], pwd, free [drive], stat [file], dir [uri], touch [file], del/rm [file], mkdir/md [name], write [name] [text to write].\r\n");
 		return;
 	}
-	shell_tx_str("Unknown command.\r\n");
+	shell_tx_str(ctx, "Unknown command.\r\n");
 }
 

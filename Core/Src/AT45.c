@@ -321,31 +321,25 @@ void consolidate_records_page(uint32_t pagenr, uint32_t record_in_page)
 // ==================================================================================================
 // Diagnostic functions
 
-void wear_dump()
+void wear_dump(shell_ctx_t *ctx)
 {
 	uint8_t page[512];
-	char buf[12];
 	for (int i = 0; i < PAGES_FOR_ALL_RECORDS; i++)
 	{
 		at45_read_page_dma(page, i+WC_FIRST_PAGE);
 		for (int j = 0; j < RECORDS_PER_PAGE; j++)
 		{
 			if (j % 16 == 0)
-			{
-				//sprintf(buf, "%04X: ", i * RECORDS_PER_PAGE + j);
-				sprintf(buf, "%04u: ", i * RECORDS_PER_PAGE + j);
-				shell_tx_str(buf);
-			}
+				shell_printf(ctx, "%04u: ", i * RECORDS_PER_PAGE + j);
 			uint32_t total = get_total_count(page + RECORD_LENGTH * j);
-			sprintf(buf, "%8lu ", total);
-			shell_tx_str(buf);
+			shell_printf(ctx, "%8lu ", total);
 			if (j % 16 == 15)
-				shell_tx_str("\r\n");
+				shell_tx_str(ctx, "\r\n");
 		}
 	}
 }
 
-HAL_StatusTypeDef at45_dump_page(uint32_t pagenr)
+HAL_StatusTypeDef at45_dump_page(shell_ctx_t *ctx, uint32_t pagenr)
 {
     uint8_t page[512];
     char buf[64];
@@ -353,32 +347,29 @@ HAL_StatusTypeDef at45_dump_page(uint32_t pagenr)
 
     for (int row = 0; row < 512; row += 16)
     {
-        sprintf(buf, "%03lX: ", pagenr * 512L + row);   /* byte-adres, of "%04lX: " paginanaam */
-        shell_tx_str(buf);
+        shell_printf(ctx, "%03lX: ", pagenr * 512L + row);   /* byte-adres, of "%04lX: " paginanaam */
         for (int col = 0; col < 16; col++)
-        {
-            sprintf(buf, "%02X ", page[row + col]);
-            shell_tx_str(buf);
-        }
+            shell_printf(ctx, "%02X ", page[row + col]);
+
         /* ASCII-kolom: leesbaarheid bij strings/structs */
-        shell_tx_str(" |");
+        shell_tx_str(ctx, " |");
         for (int col = 0; col < 16; col++)
         {
             uint8_t c = page[row + col];
             buf[col] = (c >= 0x20 && c < 0x7F) ? c : '.';
         }
         buf[16] = 0;
-        shell_tx_str(buf);
-        shell_tx_str("|\r\n");
+        shell_tx_str(ctx, buf);
+        shell_tx_str(ctx, "|\r\n");
     }
     return rv;
 }
 
-HAL_StatusTypeDef at45_dump_pages(uint32_t first, uint32_t last)
+HAL_StatusTypeDef at45_dump_pages(shell_ctx_t *ctx, uint32_t first, uint32_t last)
 {
     for (uint32_t p = first; p <= last; p++)
     {
-        HAL_StatusTypeDef rv = at45_dump_page(p);
+        HAL_StatusTypeDef rv = at45_dump_page(ctx, p);
         if (rv != HAL_OK)
             return rv;
     }
@@ -416,7 +407,7 @@ HAL_StatusTypeDef at45_erase_pages(uint32_t first, uint32_t last)
     return HAL_OK;
 }
 
-void s_at(int argc, char** argv)
+void s_at(shell_ctx_t *ctx, int argc, char** argv)
 {
 	if ((argc >= 3) && strcmp(argv[1], "erase") == 0)
 	{
@@ -438,16 +429,16 @@ void s_at(int argc, char** argv)
 			sscanf(argv[3], "%lu", &to);
 		else
 			to = from;
-		at45_dump_pages(from, to);
+		at45_dump_pages(ctx, from, to);
 		return;
 	}
 
 	if ((argc >= 2) && strcmp(argv[1], "wear") == 0)
 	{
-		wear_dump();
+		wear_dump(ctx);
 		return;
 	}
-	shell_tx_str("Commands: erase, dump, wear.\r\n");
+	shell_tx_str(ctx, "Commands: erase, dump, wear.\r\n");
 }
 
 
