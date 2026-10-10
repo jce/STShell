@@ -21,10 +21,12 @@ typedef enum nvstore_desc_e {
 	NV_NET_GW = 0x06,
 	NV_NET_MASK = 0x07,
 	NV_NET_MAC = 0x08,
+	NV_NET_DNS = 0x09,
 	NV_UNUSED = 0xFF
 } nvstore_desc;
 
 HAL_StatusTypeDef nvstore(nvstore_desc desc, uint8_t size, void *p);	// Store a bit of information in NV
-void* nvfind(nvstore_desc desc);			// Find the NV location for the descriptor.
+void* nvfind(nvstore_desc desc);					// Find the NV location for the descriptor.
+void nvget(void*, nvstore_desc, uint32_t, void*);	// Fill in a field with nvstore variable, with default.
 
 #endif /* INC_NVSTORE_H_ */

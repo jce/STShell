@@ -173,4 +173,28 @@ HAL_StatusTypeDef nvconsolidate(nvstore_desc desc, uint8_t size, void *p)
 	return HAL_OK;
 }
 
+// Fill in a field with nvstore variable, with default.
+void nvget(void *dst, nvstore_desc desc, uint32_t len, void *def)
+{
+	void *nvval = nvfind(desc);
+	if (nvval)
+		memcpy(dst, nvval, len);
+	else
+		memcpy(dst, def, len);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

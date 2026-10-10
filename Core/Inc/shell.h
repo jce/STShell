@@ -11,7 +11,7 @@
 #include "stdbool.h"
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.5.2"
+#define SHELL_VER "0.5.3"
 
 
 #define CBLEN 128			// Command Buffer Length
