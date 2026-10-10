@@ -20,6 +20,7 @@
 #include "ff.h"
 #include "fatfs.h"
 #include "net.h"
+#include "socket.h"
 
 // Input and output system.
 shell_ctx_t shell_ctx[NUM_SHELL];

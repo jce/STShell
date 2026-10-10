@@ -11,7 +11,7 @@
 #include "stdbool.h"
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.5.3"
+#define SHELL_VER "0.5.4"
 
 
 #define CBLEN 128			// Command Buffer Length
@@ -29,7 +29,7 @@ typedef struct shell_ctx_s
 	void *rx_ctx, *tx_ctx;
 } shell_ctx_t;
 
-#define NUM_SHELL	1
+#define NUM_SHELL	2
 extern shell_ctx_t shell_ctx[NUM_SHELL];
 
 void shell_task();			// For the RTOS

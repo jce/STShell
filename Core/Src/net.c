@@ -38,7 +38,7 @@
 
 void net_print_status(shell_ctx_t *ctx);
 void net_init_netinfo(void);
-static void cmd_net_stat(shell_ctx_t *ctx);
+static void cmd_net_stat_sockets(shell_ctx_t *ctx);
 
 void s_net(shell_ctx_t *ctx, int argc, char **argv)
 {
@@ -88,7 +88,7 @@ void s_net(shell_ctx_t *ctx, int argc, char **argv)
 		net_print_status(ctx);
 		return;
 	}
-	shell_tx_str(ctx, "Usage:\r\n\r\n");
+	shell_tx_str(ctx, "Usage:\r\n");
 	shell_tx_str(ctx, "mac [aa:bb:cc:dd:ee:ff] - Configures own mac address. Hexadecimal input.\r\n");
 	shell_tx_str(ctx, "ip [aaa.bbb.ccc.ddd] - Configures own IP address.\r\n");
 	shell_tx_str(ctx, "mask [aaa.bbb.ccc.ddd] - Configures own netmask.\r\n");
@@ -106,7 +106,14 @@ void net_print_status(shell_ctx_t *ctx)
 	shell_printf(ctx, "Mask   : %u.%u.%u.%u\r\n", ni.sn[0], ni.sn[1], ni.sn[2], ni.sn[3]);
 	shell_printf(ctx, "Gateway: %u.%u.%u.%u\r\n", ni.gw[0], ni.gw[1], ni.gw[2], ni.gw[3]);
 	shell_printf(ctx, "DNS    : %u.%u.%u.%u\r\n", ni.dns[0], ni.dns[1], ni.dns[2], ni.dns[3]);
-	cmd_net_stat(ctx);
+
+    uint8_t phycfgr = getPHYCFGR();
+    shell_printf(ctx, "Link   : %s (%s, %s)\r\n",
+    	    (phycfgr & 0x01) ? "UP" : "DOWN",
+    	    (phycfgr & 0x02) ? "100M" : "10M",
+    	    (phycfgr & 0x04) ? "full" : "half");
+
+	cmd_net_stat_sockets(ctx);
 }
 
 static const char *sn_sr_name(uint8_t sr)
@@ -129,7 +136,7 @@ static const char *sn_sr_name(uint8_t sr)
     }
 }
 
-static void cmd_net_stat(shell_ctx_t *ctx)
+static void cmd_net_stat_sockets(shell_ctx_t *ctx)
 {
     shell_printf(ctx, "Sockets:\r\n");
     shell_printf(ctx, "nr  state         port  tx_used  rx_ready\r\n");
@@ -141,7 +148,6 @@ static void cmd_net_stat(shell_ctx_t *ctx)
         uint16_t rxrdy  = getSn_RX_RSR(s);   /* ontvangen, ongelezen bytes */
         uint16_t txsize = getSn_TXBUF_SIZE(s);   /* 2 = 2 KB */
         uint16_t rxsize = getSn_RXBUF_SIZE(s);
-
         shell_printf(ctx, "%2u  %-11s  %5u  %5u/%uK  %6u/%uK\r\n",
                      s, sn_sr_name(sr), port,
                      txsize*1024 - txfree, txsize,
@@ -207,6 +213,74 @@ void net_init_netinfo(void)
 	wizchip_setnetinfo(&netinfo);
 }
 
+void udpListen(void)
+{
+	//while (true) osDelay(10);
+
+	int8_t s = socket(1, Sn_MR_UDP, 5143, SF_IO_NONBLOCK);
+	uint8_t buf[64], addr[4];
+	int32_t len;
+	uint16_t port;
+	  for(;;)
+	  {
+		  len = recvfrom(s, buf, 32, addr, &port);
+		  if (len<0)
+			  osDelay(10);
+		  if (len==0)
+			  osDelay(10);
+		  if (len>0)
+			  osDelay(10);
+	  }
+}
+
+// Sharing the shell via Telnet
+static uint8_t telnet_s_num = 0;
+
+// Returns bytes sent
+int shell_tx_telnet_s(void*, const char *c, size_t len)
+{
+	int rv = send(telnet_s_num, (uint8_t*) c, len);
+	if (rv < 0)
+		return 0;
+	return rv;
+}
+
+// Returns bytes accepted
+int shell_rx_telnet_s(void*, char *buf, size_t len)
+{
+	uint8_t sr = getSn_SR(telnet_s_num);
+	switch(sr)
+	{
+	case 0x14:	// SOCK_LISTEN
+		break;
+	case 0x17:	// SOCK_ESTABLISHED
+		uint16_t rsr = getSn_RX_RSR(telnet_s_num);
+		if (rsr)
+		{
+			int32_t rcv_len = recv(telnet_s_num, (uint8_t*) buf, len);
+			if (rcv_len < 0)
+				return 0;
+			return rcv_len;
+		}
+		break;
+	case 0x00:	// SOCK_CLOSED
+		socket(telnet_s_num, Sn_MR_TCP, 23, 0); // SF_IO_NONBLOCK
+		listen(telnet_s_num);
+		break;
+	case 0x1C:	// SOCK_CLOSE_WAIT
+	default:
+        disconnect(telnet_s_num);
+        close(telnet_s_num);
+		break;
+	}
+	return 0;
+}
+
+void init_shell_telnet(void)
+{
+	shell_ctx[1].tx = shell_tx_telnet_s;
+	shell_ctx[1].rx = shell_rx_telnet_s;
+}
 
 
 

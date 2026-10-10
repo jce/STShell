@@ -84,7 +84,7 @@ osThreadId_t STShellHandle;
 const osThreadAttr_t STShell_attributes = {
   .name = "STShell",
   .stack_size = 1024 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityLow3,
 };
 /* Definitions for PWM */
 osThreadId_t PWMHandle;
@@ -92,6 +92,13 @@ const osThreadAttr_t PWM_attributes = {
   .name = "PWM",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow1,
+};
+/* Definitions for UDPListen */
+osThreadId_t UDPListenHandle;
+const osThreadAttr_t UDPListen_attributes = {
+  .name = "UDPListen",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow2,
 };
 /* Definitions for STShell_RX */
 osMessageQueueId_t STShell_RXHandle;
@@ -129,6 +136,7 @@ static void MX_SPI3_Init(void);
 void StartDefaultTask(void *argument);
 void StartSTShell(void *argument);
 void startPWM(void *argument);
+void StartUDPListen(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -238,6 +246,9 @@ int main(void)
 
   /* creation of PWM */
   PWMHandle = osThreadNew(startPWM, NULL, &PWM_attributes);
+
+  /* creation of UDPListen */
+  UDPListenHandle = osThreadNew(StartUDPListen, NULL, &UDPListen_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -1217,6 +1228,8 @@ void StartSTShell(void *argument)
 	shell_ctx[0].rx = shell_rx_uart1;
 	HAL_UART_RxCpltCallback(&huart1);			// Arm the interrupt chain once.
 
+	init_shell_telnet();
+
 	char* motd = (char*) nvfind(NV_MOTD);
 	if (motd)
 	{
@@ -1244,6 +1257,21 @@ void startPWM(void *argument)
   /* Infinite loop */
   pwm_task();
   /* USER CODE END startPWM */
+}
+
+/* USER CODE BEGIN Header_StartUDPListen */
+/**
+* @brief Function implementing the UDPListen thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartUDPListen */
+void StartUDPListen(void *argument)
+{
+  /* USER CODE BEGIN StartUDPListen */
+  /* Infinite loop */
+	udpListen();
+  /* USER CODE END StartUDPListen */
 }
 
 /**
