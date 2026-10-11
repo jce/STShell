@@ -234,52 +234,96 @@ void udpListen(void)
 }
 
 // Sharing the shell via Telnet
-static uint8_t telnet_s_num = 0;
+#define TXBUFLEN 256
+#define CTX_NUM	1
+typedef struct telnet_ctx_s
+{
+	uint8_t sock;
+	uint16_t len;
+	char buf[TXBUFLEN];
+} telnet_ctx_t;
+static telnet_ctx_t telnet_ctx[CTX_NUM] = {0};
+int shell_flush_telnet_s(void *_ctx);
 
 // Returns bytes sent
-int shell_tx_telnet_s(void*, const char *c, size_t len)
+int shell_tx_telnet_s(void *_ctx, const char *c, size_t len)
 {
-	int rv = send(telnet_s_num, (uint8_t*) c, len);
-	if (rv < 0)
-		return 0;
+	telnet_ctx_t *ctx = (telnet_ctx_t*) _ctx;
+	int rv = 0;
+	int rv_flush;
+	while (len)
+	{
+		ctx->buf[ctx->len] = *c;
+		c++;
+		ctx->len++;
+		len--;
+		rv++;
+		if (ctx->len >= TXBUFLEN)
+		{
+			rv_flush = shell_flush_telnet_s(_ctx);
+			if (rv_flush < 0)
+				return rv_flush;
+		}
+	}
 	return rv;
 }
 
 // Returns bytes accepted
-int shell_rx_telnet_s(void*, char *buf, size_t len)
+int shell_rx_telnet_s(void *_ctx, char *buf, size_t len)
 {
-	uint8_t sr = getSn_SR(telnet_s_num);
+	telnet_ctx_t *ctx = (telnet_ctx_t*) _ctx;
+	uint8_t sr = getSn_SR(ctx->sock);
 	switch(sr)
 	{
 	case 0x14:	// SOCK_LISTEN
 		break;
 	case 0x17:	// SOCK_ESTABLISHED
-		uint16_t rsr = getSn_RX_RSR(telnet_s_num);
-		if (rsr)
 		{
-			int32_t rcv_len = recv(telnet_s_num, (uint8_t*) buf, len);
-			if (rcv_len < 0)
-				return 0;
-			return rcv_len;
+			uint16_t rsr = getSn_RX_RSR(ctx->sock);
+			if (rsr)
+			{
+				int32_t rcv_len = recv(ctx->sock, (uint8_t*) buf, len);
+				if (rcv_len < 0)
+					return 0;
+				return rcv_len;
+			}
+			break;
 		}
-		break;
 	case 0x00:	// SOCK_CLOSED
-		socket(telnet_s_num, Sn_MR_TCP, 23, 0); // SF_IO_NONBLOCK
-		listen(telnet_s_num);
+		if (ctx->sock == socket(ctx->sock, Sn_MR_TCP, 23, 0)) // SF_IO_NONBLOCK gives SOCK_BUSY in recv(), therefore a hacky nonblocked read algorithm is used. https://github.com/Wiznet/ioLibrary_Driver/issues/173
+			listen(ctx->sock);
 		break;
 	case 0x1C:	// SOCK_CLOSE_WAIT
 	default:
-        disconnect(telnet_s_num);
-        close(telnet_s_num);
+		shell_flush_telnet_s(ctx);
+        disconnect(ctx->sock);
+        close(ctx->sock);
 		break;
 	}
 	return 0;
 }
 
+int shell_flush_telnet_s(void *_ctx)
+{
+	telnet_ctx_t *ctx = (telnet_ctx_t*) _ctx;
+	int rv = ctx->len;
+	if (rv)
+	{
+		int sent = send(ctx->sock, (uint8_t*) ctx->buf, ctx->len);
+		if (sent < ctx->len)
+			rv = -1;
+		ctx->len = 0;
+	}
+	return rv;
+}
+
 void init_shell_telnet(void)
 {
+	telnet_ctx[0].sock = 0;
+	shell_ctx[1].rx_ctx = shell_ctx[1].tx_ctx = shell_ctx[1].flush_ctx = &telnet_ctx[0];
 	shell_ctx[1].tx = shell_tx_telnet_s;
 	shell_ctx[1].rx = shell_rx_telnet_s;
+	shell_ctx[1].flush = shell_flush_telnet_s;
 }
 
 

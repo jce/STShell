@@ -23,7 +23,7 @@
 #include "socket.h"
 
 // Input and output system.
-shell_ctx_t shell_ctx[NUM_SHELL];
+shell_ctx_t shell_ctx[NUM_SHELL] = {0};
 
 // Returns bytes sent
 int shell_tx_uart1(void*, const char *c, size_t len)
@@ -232,6 +232,8 @@ void shell_rx(shell_ctx_t *ctx, uint8_t c)
 		ctx->cbpos = 0;
 		ctx->new_command = true;
 		shell_tx_str(ctx, SHELL_PROMPT);
+		if (ctx->flush)
+			ctx->flush(ctx->flush_ctx);
 		return;
 	}
 
@@ -250,9 +252,11 @@ void shell_task()
 	{
 		for (int i = 0; i < NUM_SHELL; i++)
 		{
-			int nrec = shell_ctx[i].rx(&shell_ctx[i], buf, SHELLRXBUFLEN);
+			int nrec = shell_ctx[i].rx(shell_ctx[i].rx_ctx, buf, SHELLRXBUFLEN);
 			for (int j = 0; j < nrec; j++)
 				shell_rx(&shell_ctx[i], buf[j]);
+			if (shell_ctx[i].flush)
+				shell_ctx[i].flush(shell_ctx[i].flush_ctx);
 		}
 		vTaskDelay(1);
 	}

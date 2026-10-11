@@ -11,7 +11,7 @@
 #include "stdbool.h"
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.5.4"
+#define SHELL_VER "0.5.5"
 
 
 #define CBLEN 128			// Command Buffer Length
@@ -22,11 +22,12 @@ typedef struct shell_ctx_s
 {
 	int (*tx)(void *ctx, const char *buf, size_t len);
 	int (*rx)(void *ctx, char *buf, size_t len);
+	int (*flush)(void *ctx);
 	char commandbuf[CBLEN+1];	// Command buffer
 	int cbpos;					// Pointer position in command buffer.
 	bool new_command;			// True if the command to be typed is new.
 	rx_state_t rx_state;
-	void *rx_ctx, *tx_ctx;
+	void *rx_ctx, *tx_ctx, *flush_ctx;
 } shell_ctx_t;
 
 #define NUM_SHELL	2
