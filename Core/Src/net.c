@@ -239,6 +239,8 @@ void udpListen(void)
 typedef struct telnet_ctx_s
 {
 	uint8_t sock;
+	uint8_t sr_prev;		// Previous socket status.
+//	uint8_t IAC_remaining;	// For eating IAC characters.
 	uint16_t len;
 	char buf[TXBUFLEN];
 } telnet_ctx_t;
@@ -279,12 +281,20 @@ int shell_rx_telnet_s(void *_ctx, char *buf, size_t len)
 		break;
 	case 0x17:	// SOCK_ESTABLISHED
 		{
+			if (ctx->sr_prev == 0x14)
+			{
+				uint8_t will_echo[] = { 0xFF, 0xFB, 0x01 };   // IAC WILL ECHO
+				send(ctx->sock, will_echo, 3);
+				uint8_t will_sga[]  = { 0xFF, 0xFB, 0x03 };   // IAC WILL SUPPRESS-GO-AHEAD (optie 3)
+				send(ctx->sock, will_sga, 3);
+			}
 			uint16_t rsr = getSn_RX_RSR(ctx->sock);
 			if (rsr)
 			{
 				int32_t rcv_len = recv(ctx->sock, (uint8_t*) buf, len);
 				if (rcv_len < 0)
 					return 0;
+				ctx->sr_prev = sr;
 				return rcv_len;
 			}
 			break;
@@ -300,6 +310,7 @@ int shell_rx_telnet_s(void *_ctx, char *buf, size_t len)
         close(ctx->sock);
 		break;
 	}
+	ctx->sr_prev = sr;
 	return 0;
 }
 

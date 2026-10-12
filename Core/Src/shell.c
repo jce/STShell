@@ -21,6 +21,7 @@
 #include "fatfs.h"
 #include "net.h"
 #include "socket.h"
+#include "ping.h"
 
 // Input and output system.
 shell_ctx_t shell_ctx[NUM_SHELL] = {0};
@@ -248,13 +249,21 @@ void shell_task()
 {
 	#define SHELLRXBUFLEN 32
 	char buf[SHELLRXBUFLEN];
+	uint8_t iac = 0;				// Filters IAC commands from telnet sessions
 	while (1)
 	{
 		for (int i = 0; i < NUM_SHELL; i++)
 		{
 			int nrec = shell_ctx[i].rx(shell_ctx[i].rx_ctx, buf, SHELLRXBUFLEN);
 			for (int j = 0; j < nrec; j++)
-				shell_rx(&shell_ctx[i], buf[j]);
+			{							// THE IAC filter filters IAC commands
+				if (buf[j] == 0xFF)		// from Telnet sessions. It should have
+					iac = 3;			// been implemented in the net library,
+				if (iac)				// but that deals with blocks of bytes.
+					iac--;				// Here it's a stream that greatly
+				else					// simplifies implementation.
+					shell_rx(&shell_ctx[i], buf[j]);
+			}
 			if (shell_ctx[i].flush)
 				shell_ctx[i].flush(shell_ctx[i].flush_ctx);
 		}
@@ -295,6 +304,9 @@ CMD(spi2baud,	s_spi2baud,	"prints SPI2 baudrate.") \
 CMD(fat,		s_fat,		"[cmd] runs a fat command") \
 CMD(at,			s_at,		"[cmd] runs a at command") \
 CMD(net,		s_net,		"[cmd] runs a net command") \
+CMD(IAC,		s_iac,		"sends some IAC on telnet") \
+CMD(ping,		s_ping,		"[ip] Pings ip address.") \
+
 // Types
 typedef void (*cmd_func_t)(shell_ctx_t *ctx, int argc, char **argv);
 typedef struct
@@ -516,7 +528,8 @@ void s_live(shell_ctx_t *ctx, int argc, char **argv)
 {
 	char c;
 	shell_tx_str(ctx, "\x1b[?25l" "\033[2J"); // Cursur hide, home.
-	while ( xQueueReceive(STShell_RXHandle, &c, 0) != pdTRUE )
+	//while ( xQueueReceive(STShell_RXHandle, &c, 0) != pdTRUE )
+	while ( ctx->rx(ctx->rx_ctx, &c, 1) == 0 )
 	{
 		shell_tx_str(ctx, "\033[0;0H");
 		s_live_gpioline(ctx);
@@ -1202,3 +1215,7 @@ void s_fat(shell_ctx_t *ctx, int argc, char **argv)
 	shell_tx_str(ctx, "Unknown command.\r\n");
 }
 
+void s_iac(shell_ctx_t *ctx, int argc, char **argv)
+{
+	shell_printf(ctx, "%c%c%c%c%c%c", 0xFF, 0xFB, 0x01, 0xFF, 0xFB, 0x03);
+}

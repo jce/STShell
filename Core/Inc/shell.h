@@ -9,9 +9,11 @@
 #define INC_SHELL_H_
 
 #include "stdbool.h"
+#include <stdint.h>
+#include <stddef.h>
 
 #define SHELL_PROMPT ">"
-#define SHELL_VER "0.5.5"
+#define SHELL_VER "0.5.6"
 
 
 #define CBLEN 128			// Command Buffer Length
